@@ -13,6 +13,6 @@ RUN apk add --no-cache \
 WORKDIR /var/www/backend
 
 COPY backend/ /var/www/backend
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 CMD ["php-fpm", "-F"]
-

@@ -1009,6 +1009,12 @@ img {
   line-height: 1.6;
 }
 
+.upload-card__header small {
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 0.78rem;
+}
+
 .upload-field--panel {
   display: grid;
   gap: 10px;

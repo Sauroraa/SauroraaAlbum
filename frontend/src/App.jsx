@@ -1353,6 +1353,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
               <div className="upload-card__header">
                 <strong>{t('cover_upload_title')}</strong>
                 <span>{t('cover_upload_text')}</span>
+                <small>{t('upload_help')}</small>
               </div>
               {coverPhoto ? (
                 <div className="cover-preview">
@@ -1373,6 +1374,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
               <div className="upload-card__header">
                 <strong>{t('gallery_upload_title')}</strong>
                 <span>{t('gallery_upload_text')}</span>
+                <small>{t('upload_help')}</small>
               </div>
               <label className="upload-field upload-field--panel">
                 <span>{isUploadingPhotos ? t('uploading') : t('upload_photos')}</span>

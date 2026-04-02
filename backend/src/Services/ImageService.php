@@ -12,14 +12,16 @@ class ImageService
 
     public static function storeEventImage(array $file, int $year, string $slug): array
     {
-        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            throw new \RuntimeException('Upload invalide.');
+        $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+
+        if ($uploadError !== UPLOAD_ERR_OK) {
+            throw new \RuntimeException(self::uploadErrorMessage($uploadError));
         }
 
         $mime = mime_content_type($file['tmp_name']);
 
         if (!isset(self::ALLOWED_MIMES[$mime])) {
-            throw new \RuntimeException('Format image non supporté.');
+            throw new \RuntimeException('Format image non supporte. Utilisez JPG, PNG ou WebP.');
         }
 
         $source = imagecreatefromstring((string) file_get_contents($file['tmp_name']));
@@ -58,6 +60,19 @@ class ImageService
         ];
     }
 
+    private static function uploadErrorMessage(int $errorCode): string
+    {
+        return match ($errorCode) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Fichier trop volumineux. Reduisez la taille de l’image.',
+            UPLOAD_ERR_PARTIAL => 'Upload incomplet. Reessayez.',
+            UPLOAD_ERR_NO_FILE => 'Aucun fichier recu.',
+            UPLOAD_ERR_NO_TMP_DIR => 'Dossier temporaire introuvable sur le serveur.',
+            UPLOAD_ERR_CANT_WRITE => 'Impossible d’ecrire le fichier sur le disque.',
+            UPLOAD_ERR_EXTENSION => 'Upload bloque par une extension serveur.',
+            default => 'Upload invalide.',
+        };
+    }
+
     private static function resizeAndWrite(\GdImage $source, string $targetPath, int $maxWidth, int $quality): void
     {
         $width = imagesx($source);
@@ -74,4 +89,3 @@ class ImageService
         imagedestroy($canvas);
     }
 }
-
