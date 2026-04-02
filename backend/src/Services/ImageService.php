@@ -24,12 +24,6 @@ class ImageService
             throw new \RuntimeException('Format image non supporte. Utilisez JPG, PNG ou WebP.');
         }
 
-        $source = imagecreatefromstring((string) file_get_contents($file['tmp_name']));
-
-        if (!$source) {
-            throw new \RuntimeException('Impossible de lire l’image.');
-        }
-
         $baseDir = dirname(__DIR__, 2) . '/uploads/events/' . $year . '/' . $slug;
         $originalDir = $baseDir . '/original';
         $webDir = $baseDir . '/web';
@@ -49,9 +43,17 @@ class ImageService
             throw new \RuntimeException('Impossible de déplacer le fichier uploadé.');
         }
 
-        self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $webRelative, 1800, 82);
-        self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $thumbRelative, 640, 76);
-        imagedestroy($source);
+        $originalPath = dirname(__DIR__, 2) . '/uploads/' . $originalRelative;
+        $source = self::createImageResource($originalPath, $mime);
+
+        if ($source) {
+            self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $webRelative, 1800, 82);
+            self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $thumbRelative, 640, 76);
+            imagedestroy($source);
+        } else {
+            copy($originalPath, dirname(__DIR__, 2) . '/uploads/' . $webRelative);
+            copy($originalPath, dirname(__DIR__, 2) . '/uploads/' . $thumbRelative);
+        }
 
         return [
             'filename' => $safeName . '.' . $originalExt,
@@ -87,5 +89,15 @@ class ImageService
         imagecopyresampled($canvas, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
         imagewebp($canvas, $targetPath, $quality);
         imagedestroy($canvas);
+    }
+
+    private static function createImageResource(string $path, string $mime): ?\GdImage
+    {
+        return match ($mime) {
+            'image/jpeg' => @imagecreatefromjpeg($path) ?: null,
+            'image/png' => @imagecreatefrompng($path) ?: null,
+            'image/webp' => function_exists('imagecreatefromwebp') ? (@imagecreatefromwebp($path) ?: null) : null,
+            default => null,
+        };
     }
 }

@@ -1251,7 +1251,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
 
     const payload = {
       ...form,
-      cover_photo_id: form.cover_photo_id || mediaState.coverPhotoId || null,
+      cover_photo_id: form.cover_photo_id || mediaState.coverPhotoId || mediaState.photos[0]?.id || current?.photos?.[0]?.id || null,
     }
     setIsSaving(true)
     try {
@@ -1458,7 +1458,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   }
 
   const current = events.find((item) => String(item.id) === String(id))
-  const effectiveCoverPhotoId = form.cover_photo_id || mediaState.coverPhotoId || ''
+  const effectiveCoverPhotoId = form.cover_photo_id || mediaState.coverPhotoId || mediaState.photos[0]?.id || current?.photos?.[0]?.id || ''
   const photos = mediaState.photos.length ? mediaState.photos : current?.photos || []
   const coverPhoto = photos.find((photo) => String(photo.id) === String(effectiveCoverPhotoId))
   const uploadDoneCount = pendingPhotoFiles.filter((file) => file.status === 'done').length

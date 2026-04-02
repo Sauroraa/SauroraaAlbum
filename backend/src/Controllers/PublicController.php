@@ -22,11 +22,12 @@ class PublicController
 
         foreach ($rows as &$row) {
             $cover = $this->db->prepare(
-                'SELECT p.thumbnail_path
+                'SELECT COALESCE(cp.thumbnail_path, fp.thumbnail_path) AS cover_path
                  FROM events e
-                 LEFT JOIN photos p ON p.id = e.cover_photo_id
+                 LEFT JOIN photos cp ON cp.id = e.cover_photo_id
+                 LEFT JOIN photos fp ON fp.event_id = e.id AND fp.is_visible = 1
                  WHERE e.year = :year AND e.is_published = 1
-                 ORDER BY e.event_date DESC
+                 ORDER BY e.event_date DESC, fp.position ASC, fp.id ASC
                  LIMIT 1'
             );
             $cover->execute(['year' => $row['year']]);
@@ -57,9 +58,18 @@ class PublicController
             $params['search'] = '%' . $search . '%';
         }
 
-        $sql = 'SELECT e.*, p.filepath AS cover_path, p.thumbnail_path AS cover_thumb
+        $sql = 'SELECT e.*,
+                       COALESCE(cp.filepath, fp.filepath) AS cover_path,
+                       COALESCE(cp.thumbnail_path, fp.thumbnail_path) AS cover_thumb
                 FROM events e
-                LEFT JOIN photos p ON p.id = e.cover_photo_id';
+                LEFT JOIN photos cp ON cp.id = e.cover_photo_id
+                LEFT JOIN photos fp ON fp.id = (
+                    SELECT id
+                    FROM photos
+                    WHERE event_id = e.id AND is_visible = 1
+                    ORDER BY position ASC, id ASC
+                    LIMIT 1
+                )';
 
         if ($conditions) {
             $sql .= ' WHERE ' . implode(' AND ', $conditions);
@@ -82,9 +92,18 @@ class PublicController
 
     public function eventBySlug(string $slug, bool $includeDrafts = false): void
     {
-        $sql = 'SELECT e.*, p.filepath AS cover_path, p.thumbnail_path AS cover_thumb
+        $sql = 'SELECT e.*,
+                       COALESCE(cp.filepath, fp.filepath) AS cover_path,
+                       COALESCE(cp.thumbnail_path, fp.thumbnail_path) AS cover_thumb
                 FROM events e
-                LEFT JOIN photos p ON p.id = e.cover_photo_id
+                LEFT JOIN photos cp ON cp.id = e.cover_photo_id
+                LEFT JOIN photos fp ON fp.id = (
+                    SELECT id
+                    FROM photos
+                    WHERE event_id = e.id AND is_visible = 1
+                    ORDER BY position ASC, id ASC
+                    LIMIT 1
+                )
                 WHERE e.slug = :slug';
 
         if (!$includeDrafts) {
