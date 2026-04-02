@@ -1149,6 +1149,9 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   const [isSaving, setIsSaving] = useState(false)
   const [isUploadingCover, setIsUploadingCover] = useState(false)
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
+  const [pendingCoverFile, setPendingCoverFile] = useState(null)
+  const [pendingCoverPreview, setPendingCoverPreview] = useState('')
+  const [pendingPhotoFiles, setPendingPhotoFiles] = useState([])
 
   usePageMeta({
     title: `${id ? t('edit_event_title') : t('create_event_title')} | Sauroraa Albums`,
@@ -1167,6 +1170,14 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     if (!admin) return
     refreshEvents()
   }, [admin, id])
+
+  useEffect(() => {
+    return () => {
+      if (pendingCoverPreview) {
+        URL.revokeObjectURL(pendingCoverPreview)
+      }
+    }
+  }, [pendingCoverPreview])
 
   if (!admin) {
     return <AdminLoginPage onAuthenticated={onAuthenticated} t={t} />
@@ -1242,8 +1253,24 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
       setError(err.response?.data?.message || t('upload_error'))
     } finally {
       event.target.value = ''
+      setPendingCoverFile(null)
+      if (pendingCoverPreview) {
+        URL.revokeObjectURL(pendingCoverPreview)
+        setPendingCoverPreview('')
+      }
       setIsUploadingCover(false)
     }
+  }
+
+  function handleCoverSelection(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (pendingCoverPreview) {
+      URL.revokeObjectURL(pendingCoverPreview)
+    }
+    setPendingCoverFile(file)
+    setPendingCoverPreview(URL.createObjectURL(file))
+    handleCoverUpload(event)
   }
 
   async function handleUploadPhotos(event) {
@@ -1251,6 +1278,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     if (!files?.length || !id) return
     setError('')
     setStatus('')
+    setPendingPhotoFiles(Array.from(files))
     setIsUploadingPhotos(true)
     try {
       await uploadPhotos(id, files)
@@ -1260,6 +1288,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
       setError(err.response?.data?.message || t('upload_error'))
     } finally {
       event.target.value = ''
+      setPendingPhotoFiles([])
       setIsUploadingPhotos(false)
     }
   }
@@ -1359,14 +1388,26 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
                 <div className="cover-preview">
                   <img src={coverPhoto.thumbnail_url} alt={t('cover')} />
                 </div>
+              ) : pendingCoverPreview ? (
+                <div className="cover-preview">
+                  <img src={pendingCoverPreview} alt={pendingCoverFile?.name || t('cover')} />
+                </div>
               ) : (
                 <div className="cover-preview cover-preview--empty">
                   <span>{t('no_cover')}</span>
                 </div>
               )}
+              {pendingCoverFile ? (
+                <div className="selected-files">
+                  <div className="selected-file">
+                    <strong>{pendingCoverFile.name}</strong>
+                    <span>{t('selected_cover_ready')}</span>
+                  </div>
+                </div>
+              ) : null}
               <label className="upload-field upload-field--panel">
                 <span>{isUploadingCover ? t('uploading') : t('upload_cover')}</span>
-                <input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={handleCoverUpload} disabled={isUploadingCover} />
+                <input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={handleCoverSelection} disabled={isUploadingCover} />
               </label>
             </div>
 
@@ -1380,6 +1421,22 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
                 <span>{isUploadingPhotos ? t('uploading') : t('upload_photos')}</span>
                 <input type="file" accept=".jpg,.jpeg,.png,.webp" multiple onChange={handleUploadPhotos} disabled={isUploadingPhotos} />
               </label>
+              {pendingPhotoFiles.length ? (
+                <div className="selected-files">
+                  {pendingPhotoFiles.slice(0, 8).map((file) => (
+                    <div key={`${file.name}-${file.size}`} className="selected-file">
+                      <strong>{file.name}</strong>
+                      <span>{Math.max(1, Math.round(file.size / 1024))} KB</span>
+                    </div>
+                  ))}
+                  {pendingPhotoFiles.length > 8 ? (
+                    <div className="selected-file selected-file--more">
+                      <strong>+{pendingPhotoFiles.length - 8}</strong>
+                      <span>{t('more_files')}</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         ) : <p className="form-hint">{t('save_first_hint')}</p>}
