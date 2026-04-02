@@ -1314,6 +1314,13 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
             }
           }),
         )
+        await saveEvent(
+          {
+            ...form,
+            cover_photo_id: coverId,
+          },
+          id,
+        )
         await refreshEvents(coverId)
       } else {
         await refreshEvents()
@@ -1348,7 +1355,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     setError('')
     setIsUploadingPhotos(true)
     try {
-      await uploadPhotos(id, queueItems.map((item) => item.file), {
+      const createdPhotos = await uploadPhotos(id, queueItems.map((item) => item.file), {
         onFileProgress: ({ index, percent }) => {
           const currentItem = queueItems[index]
           setPendingPhotoFiles((current) =>
@@ -1381,8 +1388,30 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
           )
         },
       })
+      const nextCoverId = form.cover_photo_id || mediaState.coverPhotoId || createdPhotos?.[0]?.id || null
+      if (nextCoverId && !form.cover_photo_id && !mediaState.coverPhotoId) {
+        setForm((prev) => ({ ...prev, cover_photo_id: nextCoverId }))
+        setMediaState((prev) => {
+          const selectedPhoto = prev.photos.find((photo) => String(photo.id) === String(nextCoverId))
+          return {
+            ...prev,
+            coverPhotoId: nextCoverId,
+            coverImageUrl: selectedPhoto?.url || prev.coverImageUrl,
+            coverThumbnailUrl: selectedPhoto?.thumbnail_url || prev.coverThumbnailUrl,
+          }
+        })
+      }
+      if (nextCoverId) {
+        await saveEvent(
+          {
+            ...form,
+            cover_photo_id: nextCoverId,
+          },
+          id,
+        )
+      }
       setStatus(t('photos_sent'))
-      await refreshEvents()
+      await refreshEvents(nextCoverId)
     } catch (err) {
       setError(err.response?.data?.message || t('upload_error'))
       setPendingPhotoFiles((current) =>
