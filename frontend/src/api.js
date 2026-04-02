@@ -57,17 +57,34 @@ export async function deleteEvent(id) {
   await api.delete(`/admin/events/${id}`)
 }
 
-export async function uploadPhotos(eventId, files) {
+export async function uploadPhotos(eventId, files, options = {}) {
   const fileList = Array.from(files)
-  const chunkSize = 8
   const created = []
 
-  for (let index = 0; index < fileList.length; index += chunkSize) {
+  for (let index = 0; index < fileList.length; index += 1) {
+    const file = fileList[index]
     const body = new FormData()
     body.append('event_id', eventId)
-    fileList.slice(index, index + chunkSize).forEach((file) => body.append('photos[]', file))
-    const { data } = await api.post('/admin/photos/upload', body)
+    body.append('photos[]', file)
+
+    const { data } = await api.post('/admin/photos/upload', body, {
+      onUploadProgress: (progressEvent) => {
+        if (!progressEvent.total) return
+        const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100)
+        options.onFileProgress?.({
+          index,
+          file,
+          percent,
+        })
+      },
+    })
+
     created.push(...(data.data || []))
+    options.onFileComplete?.({
+      index,
+      file,
+      created: data.data || [],
+    })
   }
 
   return created

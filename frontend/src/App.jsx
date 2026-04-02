@@ -1152,6 +1152,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   const [pendingCoverFile, setPendingCoverFile] = useState(null)
   const [pendingCoverPreview, setPendingCoverPreview] = useState('')
   const [pendingPhotoFiles, setPendingPhotoFiles] = useState([])
+  const [coverUploadProgress, setCoverUploadProgress] = useState(0)
 
   usePageMeta({
     title: `${id ? t('edit_event_title') : t('create_event_title')} | Sauroraa Albums`,
@@ -1234,8 +1235,11 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     setError('')
     setStatus('')
     setIsUploadingCover(true)
+    setCoverUploadProgress(0)
     try {
-      const created = await uploadPhotos(id, [file])
+      const created = await uploadPhotos(id, [file], {
+        onFileProgress: ({ percent }) => setCoverUploadProgress(percent),
+      })
       const coverId = created?.[0]?.id
       if (coverId) {
         const payload = {
@@ -1258,6 +1262,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
         URL.revokeObjectURL(pendingCoverPreview)
         setPendingCoverPreview('')
       }
+      setCoverUploadProgress(0)
       setIsUploadingCover(false)
     }
   }
@@ -1278,17 +1283,36 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     if (!files?.length || !id) return
     setError('')
     setStatus('')
-    setPendingPhotoFiles(Array.from(files))
+    const selectedFiles = Array.from(files).map((file) => ({
+      name: file.name,
+      size: file.size,
+      progress: 0,
+      status: 'pending',
+    }))
+    setPendingPhotoFiles(selectedFiles)
     setIsUploadingPhotos(true)
     try {
-      await uploadPhotos(id, files)
+      await uploadPhotos(id, files, {
+        onFileProgress: ({ index, percent }) => {
+          setPendingPhotoFiles((current) =>
+            current.map((item, itemIndex) => (itemIndex === index ? { ...item, progress: percent, status: 'uploading' } : item)),
+          )
+        },
+        onFileComplete: ({ index }) => {
+          setPendingPhotoFiles((current) =>
+            current.map((item, itemIndex) => (itemIndex === index ? { ...item, progress: 100, status: 'done' } : item)),
+          )
+        },
+      })
       setStatus(t('photos_sent'))
       await refreshEvents()
     } catch (err) {
       setError(err.response?.data?.message || t('upload_error'))
+      setPendingPhotoFiles((current) =>
+        current.map((item) => (item.status === 'done' ? item : { ...item, status: 'error' })),
+      )
     } finally {
       event.target.value = ''
-      setPendingPhotoFiles([])
       setIsUploadingPhotos(false)
     }
   }
@@ -1402,6 +1426,11 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
                   <div className="selected-file">
                     <strong>{pendingCoverFile.name}</strong>
                     <span>{t('selected_cover_ready')}</span>
+                    {isUploadingCover ? (
+                      <div className="upload-progress">
+                        <div className="upload-progress__bar" style={{ width: `${coverUploadProgress}%` }} />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -1426,7 +1455,10 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
                   {pendingPhotoFiles.slice(0, 8).map((file) => (
                     <div key={`${file.name}-${file.size}`} className="selected-file">
                       <strong>{file.name}</strong>
-                      <span>{Math.max(1, Math.round(file.size / 1024))} KB</span>
+                      <span>{Math.max(1, Math.round(file.size / 1024))} KB · {t(`upload_status_${file.status}`)}</span>
+                      <div className="upload-progress">
+                        <div className="upload-progress__bar" style={{ width: `${file.progress}%` }} />
+                      </div>
                     </div>
                   ))}
                   {pendingPhotoFiles.length > 8 ? (
