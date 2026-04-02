@@ -1272,7 +1272,30 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
       })
       const coverId = created?.[0]?.id
       if (coverId) {
+        const createdCover = {
+          ...created[0],
+          filename: file.name,
+          alt_text: file.name.replace(/\.[^.]+$/, ''),
+          is_visible: true,
+          position: 0,
+        }
         setForm((prev) => ({ ...prev, cover_photo_id: coverId }))
+        setEvents((currentEvents) =>
+          currentEvents.map((item) => {
+            if (String(item.id) !== String(id)) return item
+
+            const existingPhotos = Array.isArray(item.photos) ? item.photos : []
+            const withoutDuplicate = existingPhotos.filter((photo) => String(photo.id) !== String(coverId))
+
+            return {
+              ...item,
+              cover_photo_id: coverId,
+              cover_image_url: createdCover.url,
+              cover_thumbnail_url: createdCover.thumbnail_url,
+              photos: [createdCover, ...withoutDuplicate],
+            }
+          }),
+        )
         await refreshEvents(coverId)
       } else {
         await refreshEvents()
