@@ -31,7 +31,7 @@ class PublicController
             );
             $cover->execute(['year' => $row['year']]);
             $image = $cover->fetchColumn();
-            $row['cover_image_url'] = $image ? baseUrl('uploads/' . $image) : null;
+            $row['cover_image_url'] = $image ? assetUrl('uploads/' . $image) : null;
         }
 
         jsonResponse(['data' => $rows]);
@@ -122,8 +122,8 @@ class PublicController
                 'id' => (int) $photo['id'],
                 'alt_text' => $photo['alt_text'],
                 'position' => (int) $photo['position'],
-                'url' => baseUrl('uploads/' . $photo['filepath']),
-                'thumbnail_url' => baseUrl('uploads/' . $photo['thumbnail_path']),
+                'url' => assetUrl('uploads/' . $photo['filepath']),
+                'thumbnail_url' => assetUrl('uploads/' . $photo['thumbnail_path']),
             ];
         }, $photos->fetchAll());
     }
@@ -140,9 +140,8 @@ class PublicController
             'description' => $event['description'],
             'cover_photo_id' => $event['cover_photo_id'] ? (int) $event['cover_photo_id'] : null,
             'is_published' => (bool) $event['is_published'],
-            'cover_image_url' => $event['cover_path'] ? baseUrl('uploads/' . $event['cover_path']) : null,
-            'cover_thumbnail_url' => $event['cover_thumb'] ? baseUrl('uploads/' . $event['cover_thumb']) : null,
+            'cover_image_url' => $event['cover_path'] ? assetUrl('uploads/' . $event['cover_path']) : null,
+            'cover_thumbnail_url' => $event['cover_thumb'] ? assetUrl('uploads/' . $event['cover_thumb']) : null,
         ];
     }
 }
-

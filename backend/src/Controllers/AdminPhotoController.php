@@ -69,8 +69,8 @@ class AdminPhotoController
             $photoId = (int) $this->db->lastInsertId();
             $created[] = [
                 'id' => $photoId,
-                'url' => baseUrl('uploads/' . $stored['filepath']),
-                'thumbnail_url' => baseUrl('uploads/' . $stored['thumbnail_path']),
+                'url' => assetUrl('uploads/' . $stored['filepath']),
+                'thumbnail_url' => assetUrl('uploads/' . $stored['thumbnail_path']),
             ];
         }
 

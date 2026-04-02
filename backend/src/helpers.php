@@ -28,6 +28,11 @@ function baseUrl(string $path = ''): string
     return rtrim($config['url'], '/') . '/' . ltrim($path, '/');
 }
 
+function assetUrl(string $path = ''): string
+{
+    return '/' . ltrim($path, '/');
+}
+
 function ensureDirectory(string $path): void
 {
     if (!is_dir($path)) {
@@ -43,4 +48,3 @@ function slugify(string $value): string
 
     return $value ?: 'event';
 }
-
