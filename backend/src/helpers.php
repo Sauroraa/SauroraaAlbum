@@ -36,7 +36,17 @@ function assetUrl(string $path = ''): string
 function ensureDirectory(string $path): void
 {
     if (!is_dir($path)) {
-        mkdir($path, 0775, true);
+        if (!@mkdir($path, 0777, true) && !is_dir($path)) {
+            throw new RuntimeException('Impossible de créer le dossier : ' . $path);
+        }
+    }
+
+    if (!is_writable($path)) {
+        @chmod($path, 0777);
+    }
+
+    if (!is_writable($path)) {
+        throw new RuntimeException('Dossier non accessible en écriture : ' . $path);
     }
 }
 

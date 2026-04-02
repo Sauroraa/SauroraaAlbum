@@ -14,5 +14,8 @@ WORKDIR /var/www/backend
 
 COPY backend/ /var/www/backend
 COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+COPY docker/php/entrypoint.sh /usr/local/bin/album-entrypoint.sh
 
-CMD ["php-fpm", "-F"]
+RUN chmod +x /usr/local/bin/album-entrypoint.sh
+
+CMD ["/usr/local/bin/album-entrypoint.sh"]

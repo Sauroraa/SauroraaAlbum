@@ -10,6 +10,13 @@ class ImageService
         'image/webp' => 'webp',
     ];
 
+    private const ALLOWED_EXTENSIONS = [
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+    ];
+
     public static function storeEventImage(array $file, int $year, string $slug): array
     {
         $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
@@ -18,7 +25,7 @@ class ImageService
             throw new \RuntimeException(self::uploadErrorMessage($uploadError));
         }
 
-        $mime = mime_content_type($file['tmp_name']);
+        $mime = self::detectMime($file);
 
         if (!isset(self::ALLOWED_MIMES[$mime])) {
             throw new \RuntimeException('Format image non supporte. Utilisez JPG, PNG ou WebP.');
@@ -39,8 +46,8 @@ class ImageService
         $webRelative = 'events/' . $year . '/' . $slug . '/web/' . $safeName . '.webp';
         $thumbRelative = 'events/' . $year . '/' . $slug . '/thumb/' . $safeName . '.webp';
 
-        if (!move_uploaded_file($file['tmp_name'], dirname(__DIR__, 2) . '/uploads/' . $originalRelative)) {
-            throw new \RuntimeException('Impossible de déplacer le fichier uploadé.');
+        if (!self::persistUploadedFile($file['tmp_name'], dirname(__DIR__, 2) . '/uploads/' . $originalRelative)) {
+            throw new \RuntimeException('Impossible d’enregistrer le fichier uploadé sur le serveur.');
         }
 
         $originalPath = dirname(__DIR__, 2) . '/uploads/' . $originalRelative;
@@ -51,8 +58,12 @@ class ImageService
             self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $thumbRelative, 640, 76);
             imagedestroy($source);
         } else {
-            copy($originalPath, dirname(__DIR__, 2) . '/uploads/' . $webRelative);
-            copy($originalPath, dirname(__DIR__, 2) . '/uploads/' . $thumbRelative);
+            if (!@copy($originalPath, dirname(__DIR__, 2) . '/uploads/' . $webRelative)) {
+                throw new \RuntimeException('Impossible de générer la version web de l’image.');
+            }
+            if (!@copy($originalPath, dirname(__DIR__, 2) . '/uploads/' . $thumbRelative)) {
+                throw new \RuntimeException('Impossible de générer la miniature de l’image.');
+            }
         }
 
         return [
@@ -87,7 +98,10 @@ class ImageService
         imagealphablending($canvas, true);
         imagesavealpha($canvas, true);
         imagecopyresampled($canvas, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-        imagewebp($canvas, $targetPath, $quality);
+        if (!imagewebp($canvas, $targetPath, $quality)) {
+            imagedestroy($canvas);
+            throw new \RuntimeException('Impossible d’écrire l’image optimisée.');
+        }
         imagedestroy($canvas);
     }
 
@@ -99,5 +113,73 @@ class ImageService
             'image/webp' => function_exists('imagecreatefromwebp') ? (@imagecreatefromwebp($path) ?: null) : null,
             default => null,
         };
+    }
+
+    private static function detectMime(array $file): string
+    {
+        $tmpName = (string) ($file['tmp_name'] ?? '');
+        $originalName = (string) ($file['name'] ?? '');
+
+        $mime = '';
+        if ($tmpName !== '' && is_file($tmpName)) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo !== false) {
+                $detected = finfo_file($finfo, $tmpName);
+                finfo_close($finfo);
+                if (is_string($detected)) {
+                    $mime = $detected;
+                }
+            }
+
+            if (!$mime && function_exists('mime_content_type')) {
+                $detected = @mime_content_type($tmpName);
+                if (is_string($detected)) {
+                    $mime = $detected;
+                }
+            }
+        }
+
+        if (isset(self::ALLOWED_MIMES[$mime])) {
+            return $mime;
+        }
+
+        $extension = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        if (isset(self::ALLOWED_EXTENSIONS[$extension])) {
+            return self::ALLOWED_EXTENSIONS[$extension];
+        }
+
+        throw new \RuntimeException('Format image non supporté. Utilisez JPG, PNG ou WebP.');
+    }
+
+    private static function persistUploadedFile(string $tmpName, string $destination): bool
+    {
+        if ($tmpName === '' || !is_file($tmpName)) {
+            return false;
+        }
+
+        $directory = dirname($destination);
+        ensureDirectory($directory);
+
+        if (@move_uploaded_file($tmpName, $destination)) {
+            return true;
+        }
+
+        if (@rename($tmpName, $destination)) {
+            return true;
+        }
+
+        if (@copy($tmpName, $destination)) {
+            @unlink($tmpName);
+            return true;
+        }
+
+        error_log(sprintf(
+            '[upload] Failed to persist file. tmp=%s destination=%s writable=%s',
+            $tmpName,
+            $destination,
+            is_writable($directory) ? 'yes' : 'no'
+        ));
+
+        return false;
     }
 }

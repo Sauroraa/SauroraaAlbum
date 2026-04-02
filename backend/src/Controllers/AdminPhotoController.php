@@ -35,45 +35,55 @@ class AdminPhotoController
         }
 
         $created = [];
-        foreach ($files as $file) {
-            try {
+
+        try {
+            $this->db->beginTransaction();
+
+            foreach ($files as $file) {
                 $stored = ImageService::storeEventImage($file, (int) $row['year'], $row['slug']);
-            } catch (\RuntimeException $exception) {
-                jsonResponse(['message' => $exception->getMessage()], 422);
+
+                $position = (int) $this->db->query('SELECT COALESCE(MAX(position), 0) + 1 FROM photos WHERE event_id = ' . $eventId)->fetchColumn();
+
+                $stmt = $this->db->prepare(
+                    'INSERT INTO photos (event_id, filename, filepath, thumbnail_path, alt_text, position, is_visible)
+                     VALUES (:event_id, :filename, :filepath, :thumbnail_path, :alt_text, :position, 1)'
+                );
+                $stmt->execute([
+                    'event_id' => $eventId,
+                    'filename' => $stored['filename'],
+                    'filepath' => $stored['filepath'],
+                    'thumbnail_path' => $stored['thumbnail_path'],
+                    'alt_text' => pathinfo($stored['filename'], PATHINFO_FILENAME),
+                    'position' => $position,
+                ]);
+
+                $photoId = (int) $this->db->lastInsertId();
+                $created[] = [
+                    'id' => $photoId,
+                    'filename' => $stored['filename'],
+                    'alt_text' => pathinfo($stored['filename'], PATHINFO_FILENAME),
+                    'is_visible' => true,
+                    'position' => $position,
+                    'url' => assetUrl('uploads/' . $stored['filepath']),
+                    'thumbnail_url' => assetUrl('uploads/' . $stored['thumbnail_path']),
+                ];
             }
 
-            $position = (int) $this->db->query('SELECT COALESCE(MAX(position), 0) + 1 FROM photos WHERE event_id = ' . $eventId)->fetchColumn();
+            $cover = $this->db->prepare('SELECT cover_photo_id FROM events WHERE id = :id');
+            $cover->execute(['id' => $eventId]);
+            if (($setAsCover || !$cover->fetchColumn()) && isset($created[0]['id'])) {
+                $setCover = $this->db->prepare('UPDATE events SET cover_photo_id = :cover WHERE id = :id');
+                $setCover->execute(['cover' => $created[0]['id'], 'id' => $eventId]);
+            }
 
-            $stmt = $this->db->prepare(
-                'INSERT INTO photos (event_id, filename, filepath, thumbnail_path, alt_text, position, is_visible)
-                 VALUES (:event_id, :filename, :filepath, :thumbnail_path, :alt_text, :position, 1)'
-            );
-            $stmt->execute([
-                'event_id' => $eventId,
-                'filename' => $stored['filename'],
-                'filepath' => $stored['filepath'],
-                'thumbnail_path' => $stored['thumbnail_path'],
-                'alt_text' => pathinfo($stored['filename'], PATHINFO_FILENAME),
-                'position' => $position,
-            ]);
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
 
-            $photoId = (int) $this->db->lastInsertId();
-            $created[] = [
-                'id' => $photoId,
-                'filename' => $stored['filename'],
-                'alt_text' => pathinfo($stored['filename'], PATHINFO_FILENAME),
-                'is_visible' => true,
-                'position' => $position,
-                'url' => assetUrl('uploads/' . $stored['filepath']),
-                'thumbnail_url' => assetUrl('uploads/' . $stored['thumbnail_path']),
-            ];
-        }
-
-        $cover = $this->db->prepare('SELECT cover_photo_id FROM events WHERE id = :id');
-        $cover->execute(['id' => $eventId]);
-        if (($setAsCover || !$cover->fetchColumn()) && isset($created[0]['id'])) {
-            $setCover = $this->db->prepare('UPDATE events SET cover_photo_id = :cover WHERE id = :id');
-            $setCover->execute(['cover' => $created[0]['id'], 'id' => $eventId]);
+            error_log('[upload] ' . $exception->getMessage());
+            jsonResponse(['message' => $exception->getMessage()], 422);
         }
 
         jsonResponse([
