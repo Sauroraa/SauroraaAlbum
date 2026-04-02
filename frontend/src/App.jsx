@@ -13,26 +13,28 @@ import {
   saveEvent,
   uploadPhotos,
 } from './api'
+import { translations } from './i18n'
 
 const aboutHighlights = [
-  'Collectif d’evenements electroniques underground en Belgique',
-  'Structure professionnelle nee en 2025',
-  'Vision independante, moderne et creative de l’evenementiel',
-  'Production d’experiences immersives son, lumiere et image',
+  'about_highlight_1',
+  'about_highlight_2',
+  'about_highlight_3',
+  'about_highlight_4',
 ]
 
 const aboutTeam = [
-  { name: 'Loris', role: 'President & Directeur Technique' },
-  { name: 'Julien', role: 'Vice-President & Directeur Artistique' },
-  { name: 'Alec', role: 'Tresorier & Directeur Logistique' },
-  { name: 'Alexandre', role: 'Gestion Artistes' },
+  { name: 'Loris', roleKey: 'team_role_loris' },
+  { name: 'Julien', roleKey: 'team_role_julien' },
+  { name: 'Alec', roleKey: 'team_role_alec' },
+  { name: 'Alexandre', roleKey: 'team_role_alexandre' },
 ]
 
 const navigation = [
-  { to: '/', label: 'Accueil' },
-  { to: '/archives', label: 'Archives' },
-  { to: '/a-propos', label: 'À propos' },
-  { to: '/contact', label: 'Contact' },
+  { to: '/', key: 'nav_home' },
+  { to: '/archives', key: 'nav_archives' },
+  { to: '/a-propos', key: 'nav_about' },
+  { to: '/contact', key: 'nav_contact' },
+  { to: '/mentions-legales', key: 'nav_legal' },
 ]
 
 const emptyEvent = {
@@ -45,14 +47,177 @@ const emptyEvent = {
   is_published: false,
 }
 
-function formatEventDate(value) {
+function getSiteOrigin() {
+  if (typeof window === 'undefined') return 'https://album.sauroraa.be'
+  return window.location.origin || 'https://album.sauroraa.be'
+}
+
+function buildPageUrl(pathname = '/') {
+  return new URL(pathname, getSiteOrigin()).toString()
+}
+
+function ensureMeta(selector, attributes) {
+  let element = document.head.querySelector(selector)
+  if (!element) {
+    element = document.createElement('meta')
+    Object.entries(attributes).forEach(([key, value]) => {
+      if (key !== 'content') element.setAttribute(key, value)
+    })
+    document.head.appendChild(element)
+  }
+  return element
+}
+
+function usePageMeta({ title, description, path, image, type = 'website', jsonLd }) {
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+
+    const canonicalHref = buildPageUrl(path)
+    document.title = title
+    document.documentElement.setAttribute('data-page', path || '/')
+
+    const descriptionMeta = ensureMeta('meta[name="description"]', { name: 'description' })
+    descriptionMeta.setAttribute('content', description)
+
+    const ogTitle = ensureMeta('meta[property="og:title"]', { property: 'og:title' })
+    ogTitle.setAttribute('content', title)
+    const ogDescription = ensureMeta('meta[property="og:description"]', { property: 'og:description' })
+    ogDescription.setAttribute('content', description)
+    const ogType = ensureMeta('meta[property="og:type"]', { property: 'og:type' })
+    ogType.setAttribute('content', type)
+    const ogUrl = ensureMeta('meta[property="og:url"]', { property: 'og:url' })
+    ogUrl.setAttribute('content', canonicalHref)
+    const ogSite = ensureMeta('meta[property="og:site_name"]', { property: 'og:site_name' })
+    ogSite.setAttribute('content', 'Sauroraa Albums')
+
+    const twitterCard = ensureMeta('meta[name="twitter:card"]', { name: 'twitter:card' })
+    twitterCard.setAttribute('content', image ? 'summary_large_image' : 'summary')
+    const twitterTitle = ensureMeta('meta[name="twitter:title"]', { name: 'twitter:title' })
+    twitterTitle.setAttribute('content', title)
+    const twitterDescription = ensureMeta('meta[name="twitter:description"]', { name: 'twitter:description' })
+    twitterDescription.setAttribute('content', description)
+
+    if (image) {
+      const absoluteImage = image.startsWith('http') ? image : buildPageUrl(image)
+      const ogImage = ensureMeta('meta[property="og:image"]', { property: 'og:image' })
+      ogImage.setAttribute('content', absoluteImage)
+      const twitterImage = ensureMeta('meta[name="twitter:image"]', { name: 'twitter:image' })
+      twitterImage.setAttribute('content', absoluteImage)
+    }
+
+    let canonical = document.head.querySelector('link[rel="canonical"]')
+    if (!canonical) {
+      canonical = document.createElement('link')
+      canonical.setAttribute('rel', 'canonical')
+      document.head.appendChild(canonical)
+    }
+    canonical.setAttribute('href', canonicalHref)
+
+    let jsonLdScript = document.head.querySelector('script[data-seo-jsonld="true"]')
+    if (!jsonLdScript) {
+      jsonLdScript = document.createElement('script')
+      jsonLdScript.setAttribute('type', 'application/ld+json')
+      jsonLdScript.setAttribute('data-seo-jsonld', 'true')
+      document.head.appendChild(jsonLdScript)
+    }
+    jsonLdScript.textContent = JSON.stringify(jsonLd)
+
+    return () => {
+      document.documentElement.removeAttribute('data-page')
+    }
+  }, [description, image, jsonLd, path, title, type])
+}
+
+function formatEventDate(value, language = 'fr') {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('fr-BE')
+  const localeMap = {
+    fr: 'fr-BE',
+    en: 'en-GB',
+    nl: 'nl-BE',
+  }
+  return date.toLocaleDateString(localeMap[language] || 'fr-BE')
 }
 
-function Layout({ children, admin }) {
+function ShareActions({ title, text, path, t }) {
+  const [copied, setCopied] = useState(false)
+  const shareUrl = buildPageUrl(path)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  async function handleNativeShare() {
+    if (!navigator.share) return
+    try {
+      await navigator.share({ title, text, url: shareUrl })
+    } catch {}
+  }
+
+  const encodedUrl = encodeURIComponent(shareUrl)
+  const encodedText = encodeURIComponent(`${title} - ${text}`)
+
+  return (
+    <div className="share-actions">
+      {navigator.share ? (
+        <button type="button" className="button button--ghost" onClick={handleNativeShare}>
+          {t('share')}
+        </button>
+      ) : null}
+      <button type="button" className="button button--ghost" onClick={handleCopy}>
+        {copied ? t('copied') : t('copy_link')}
+      </button>
+      <a
+        className="button button--ghost"
+        href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Facebook
+      </a>
+      <a
+        className="button button--ghost"
+        href={`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        X
+      </a>
+    </div>
+  )
+}
+
+function LanguageModal({ onSelect, t }) {
+  return (
+    <div className="language-modal">
+      <div className="language-card">
+        <span>{t('lang_continue')}</span>
+        <h2>{t('lang_title')}</h2>
+        <p>{t('lang_text')}</p>
+        <div className="language-actions">
+          <button className="button" type="button" onClick={() => onSelect('fr')}>
+            Francais
+          </button>
+          <button className="button button--ghost" type="button" onClick={() => onSelect('en')}>
+            English
+          </button>
+          <button className="button button--ghost" type="button" onClick={() => onSelect('nl')}>
+            Nederlands
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Layout({ children, admin, t, language, setLanguage }) {
   return (
     <div className="shell">
       <header className="site-header">
@@ -70,20 +235,32 @@ function Layout({ children, admin }) {
               to={item.to}
               className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
             >
-              {item.label}
+              {t(item.key)}
             </NavLink>
           ))}
           <NavLink
             to={admin ? '/admin' : '/admin/login'}
             className={({ isActive }) => `nav-link nav-link--admin${isActive ? ' active' : ''}`}
           >
-            Admin
+            {t('nav_admin')}
           </NavLink>
+          <div className="language-switcher">
+            {['fr', 'en', 'nl'].map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                className={`language-chip${language === lang ? ' language-chip--active' : ''}`}
+                onClick={() => setLanguage(lang)}
+              >
+                {lang.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </nav>
       </header>
       <main>{children}</main>
       <footer className="footer">
-        <p>Archives photo des soirées Sauroraa.</p>
+        <p>{t('footer_tagline')}</p>
         <p>album.sauroraa.be</p>
       </footer>
     </div>
@@ -101,43 +278,49 @@ function SectionIntro({ eyebrow, title, text, action }) {
   )
 }
 
-function EventCard({ event }) {
+function EventCard({ event, t, language }) {
   return (
     <article className="event-card">
-      <div
-        className="event-card__cover"
-        style={{
-          backgroundImage: event.cover_thumbnail_url
-            ? `linear-gradient(180deg, rgba(12,14,18,.12), rgba(12,14,18,.85)), url(${event.cover_thumbnail_url})`
-            : undefined,
-        }}
-      />
+      <div className="event-card__cover">
+        {event.cover_thumbnail_url ? (
+          <img
+            className="media-cover"
+            src={event.cover_thumbnail_url}
+            alt={event.title}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : null}
+      </div>
       <div className="event-card__body">
-        <p>{formatEventDate(event.event_date)}</p>
+        <p>{formatEventDate(event.event_date, language)}</p>
         <h3>{event.title}</h3>
         <p>{event.location}</p>
         <Link className="button button--ghost" to={`/soiree/${event.slug}`}>
-          Voir l’album
+          {t('view_album')}
         </Link>
       </div>
     </article>
   )
 }
 
-function YearCard({ year }) {
+function YearCard({ year, t }) {
   return (
     <Link className="year-card" to={`/archives/${year.year}`}>
-      <div
-        className="year-card__cover"
-        style={{
-          backgroundImage: year.cover_image_url
-            ? `linear-gradient(180deg, rgba(8,10,14,.15), rgba(8,10,14,.8)), url(${year.cover_image_url})`
-            : undefined,
-        }}
-      />
+      <div className="year-card__cover">
+        {year.cover_image_url ? (
+          <img
+            className="media-cover"
+            src={year.cover_image_url}
+            alt={`${year.year}`}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : null}
+      </div>
       <div className="year-card__body">
         <strong>{year.year}</strong>
-        <span>{year.event_count} soirées</span>
+        <span>{year.event_count} {t('events_count').toLowerCase()}</span>
       </div>
     </Link>
   )
@@ -152,9 +335,15 @@ function PhotoGrid({ photos, onOpen }) {
           type="button"
           className="photo-tile"
           onClick={() => onOpen(index)}
-          style={{ backgroundImage: `url(${photo.thumbnail_url})` }}
           aria-label={photo.alt_text || `Photo ${index + 1}`}
-        />
+        >
+          <img
+            src={photo.thumbnail_url}
+            alt={photo.alt_text || `Photo ${index + 1}`}
+            loading="lazy"
+            decoding="async"
+          />
+        </button>
       ))}
     </div>
   )
@@ -189,11 +378,26 @@ function PhotoLightbox({ photos, index, onClose, onMove }) {
   )
 }
 
-function HomePage() {
+function HomePage({ t, language }) {
   const [years, setYears] = useState([])
   const [events, setEvents] = useState([])
   const featuredEvent = events[0] || null
   const secondaryEvents = events.slice(1, 4)
+
+  usePageMeta({
+    title: t('seo_home_title'),
+    description: t('seo_home_description'),
+    path: '/',
+    image: featuredEvent?.cover_image_url || '/og-default.jpg',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'Sauroraa Albums',
+      url: buildPageUrl('/'),
+      description: t('seo_home_description'),
+      inLanguage: language,
+    },
+  })
 
   useEffect(() => {
     fetchYears().then(setYears)
@@ -203,35 +407,47 @@ function HomePage() {
   return (
     <>
       <section className="hero">
+        <div className="hero__backdrop" aria-hidden="true">
+          <div className="hero__orb hero__orb--violet" />
+          <div className="hero__orb hero__orb--pink" />
+          <div className="hero__gridline" />
+        </div>
         <div className="hero__copy">
-          <span>Revivez les nuits Sauroraa</span>
-          <h1>Les archives qui prolongent l’univers Sauroraa.</h1>
-          <p>
-            Une plateforme photo pensée pour parcourir les soirées passées avec une vraie
-            presence visuelle, une navigation simple, et une mise en avant claire des albums.
-          </p>
+          <span>{t('hero_eyebrow')}</span>
+          <h1>{t('hero_title')}</h1>
+          <p>{t('hero_text')}</p>
           <div className="hero__actions">
             <Link to="/archives" className="button">
-              Parcourir les archives
+              {t('hero_browse')}
             </Link>
             <Link to="/a-propos" className="button button--ghost">
-              Découvrir l’univers
+              {t('hero_discover')}
             </Link>
+          </div>
+          <div className="hero__status">
+            <span>{t('hero_status')}</span>
+            <strong>{featuredEvent?.title || 'Sauroraa 2026'}</strong>
           </div>
           <div className="hero__metrics">
             <div>
               <strong>{years.length}</strong>
-              <span>Annees</span>
+              <span>{t('metric_years')}</span>
             </div>
             <div>
               <strong>{events.length}</strong>
-              <span>Albums recents</span>
+              <span>{t('metric_recent')}</span>
             </div>
             <div>
               <strong>2026</strong>
-              <span>Archive active</span>
+              <span>{t('metric_active')}</span>
             </div>
           </div>
+          <ShareActions
+            title={t('seo_home_title')}
+            text={t('seo_home_description')}
+            path="/"
+            t={t}
+          />
         </div>
         <div className="hero__panel">
           {featuredEvent ? (
@@ -244,12 +460,18 @@ function HomePage() {
                     : undefined,
                 }}
               >
-                <span>Derniere publication</span>
-                <h2>{featuredEvent.title}</h2>
-                <p>{featuredEvent.location}</p>
-                <Link className="button button--ghost" to={`/soiree/${featuredEvent.slug}`}>
-                  Ouvrir l’album
-                </Link>
+                <div className="hero__featured-inner">
+                  <span>{t('latest_publication')}</span>
+                  <h2>{featuredEvent.title}</h2>
+                  <p>{featuredEvent.location}</p>
+                  <div className="hero__featured-meta">
+                    <small>{formatEventDate(featuredEvent.event_date, language)}</small>
+                    <small>{featuredEvent.photos?.length || 0} {t('photos_count').toLowerCase()}</small>
+                  </div>
+                  <Link className="button button--ghost" to={`/soiree/${featuredEvent.slug}`}>
+                    {t('open_album')}
+                  </Link>
+                </div>
               </div>
               <div className="hero__list">
                 {secondaryEvents.map((event) => (
@@ -258,15 +480,15 @@ function HomePage() {
                       <strong>{event.title}</strong>
                       <small>{event.location}</small>
                     </div>
-                    <span>{formatEventDate(event.event_date)}</span>
+                    <span>{formatEventDate(event.event_date, language)}</span>
                   </Link>
                 ))}
               </div>
             </>
           ) : (
             <div className="empty-state">
-              <strong>Aucune soiree publiee pour le moment.</strong>
-              <p>Les prochains albums apparaitront ici des qu’ils seront disponibles.</p>
+              <strong>{t('no_published_title')}</strong>
+              <p>{t('no_published_text')}</p>
             </div>
           )}
         </div>
@@ -274,25 +496,25 @@ function HomePage() {
 
       <section className="section">
         <SectionIntro
-          eyebrow="Archives"
-          title="Des archives pensees comme un vrai catalogue visuel"
-          text="Chaque annee rassemble les soirees publiees avec leur couverture, leur date, leur lieu et un acces rapide a l’album."
+          eyebrow={t('archives_eyebrow')}
+          title={t('archives_title')}
+          text={t('archives_text')}
           action={
             <Link to="/archives" className="button button--ghost">
-              Voir toutes les années
+              {t('view_all_years')}
             </Link>
           }
         />
         {years.length ? (
           <div className="year-grid">
             {years.map((year) => (
-              <YearCard key={year.year} year={year} />
+              <YearCard key={year.year} year={year} t={t} />
             ))}
           </div>
         ) : (
           <div className="empty-state">
-            <strong>Aucune archive n’est encore publiee.</strong>
-            <p>Publiez une premiere soiree depuis l’administration pour alimenter la home.</p>
+            <strong>{t('no_archives_title')}</strong>
+            <p>{t('no_archives_text')}</p>
           </div>
         )}
       </section>
@@ -300,8 +522,22 @@ function HomePage() {
   )
 }
 
-function ArchivesPage() {
+function ArchivesPage({ t }) {
   const [years, setYears] = useState([])
+
+  usePageMeta({
+    title: t('seo_archives_title'),
+    description: t('seo_archives_description'),
+    path: '/archives',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: t('seo_archives_title'),
+      url: buildPageUrl('/archives'),
+      description: t('seo_archives_description'),
+    },
+  })
+
   useEffect(() => {
     fetchYears().then(setYears)
   }, [])
@@ -309,29 +545,44 @@ function ArchivesPage() {
   return (
     <section className="section">
       <SectionIntro
-        eyebrow="Archives"
-        title="Les années disponibles"
-        text="Accédez rapidement à chaque saison de soirées Sauroraa."
+        eyebrow={t('archives_eyebrow')}
+        title={t('years_available')}
+        text={t('years_available_text')}
+        action={<ShareActions title={t('seo_archives_title')} text={t('seo_archives_description')} path="/archives" t={t} />}
       />
       {years.length ? (
         <div className="year-grid">
           {years.map((year) => (
-            <YearCard key={year.year} year={year} />
+            <YearCard key={year.year} year={year} t={t} />
           ))}
         </div>
       ) : (
         <div className="empty-state">
-          <strong>Aucune annee disponible.</strong>
-          <p>Les archives apparaitront ici automatiquement apres publication.</p>
+          <strong>{t('no_years_title')}</strong>
+          <p>{t('no_years_text')}</p>
         </div>
       )}
     </section>
   )
 }
 
-function YearPage() {
+function YearPage({ t, language }) {
   const { year } = useParams()
   const [events, setEvents] = useState([])
+
+  usePageMeta({
+    title: t('seo_year_title', { year }),
+    description: t('seo_year_description', { year }),
+    path: `/archives/${year}`,
+    image: events[0]?.cover_image_url || '/og-default.jpg',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: t('seo_year_title', { year }),
+      url: buildPageUrl(`/archives/${year}`),
+      description: t('seo_year_description', { year }),
+    },
+  })
 
   useEffect(() => {
     fetchEventsByYear(year).then(setEvents)
@@ -340,27 +591,28 @@ function YearPage() {
   return (
     <section className="section">
       <SectionIntro
-        eyebrow={`Archives ${year}`}
-        title={`Soirées ${year}`}
-        text="Toutes les soirées publiées pour cette année."
+        eyebrow={t('archives_of_year', { year })}
+        title={t('events_of_year', { year })}
+        text={t('year_page_text')}
+        action={<ShareActions title={t('seo_year_title', { year })} text={t('seo_year_description', { year })} path={`/archives/${year}`} t={t} />}
       />
       {events.length ? (
         <div className="event-grid">
           {events.map((event) => (
-            <EventCard key={event.id} event={event} />
+            <EventCard key={event.id} event={event} t={t} language={language} />
           ))}
         </div>
       ) : (
         <div className="empty-state">
-          <strong>Aucune soiree publiee sur cette annee.</strong>
-          <p>La page se remplira automatiquement des qu’une soiree sera publiee.</p>
+          <strong>{t('no_events_year_title')}</strong>
+          <p>{t('no_events_year_text')}</p>
         </div>
       )}
     </section>
   )
 }
 
-function EventPage() {
+function EventPage({ t, language }) {
   const { slug } = useParams()
   const [event, setEvent] = useState(null)
   const [activePhoto, setActivePhoto] = useState(null)
@@ -369,12 +621,37 @@ function EventPage() {
     fetchEvent(slug).then(setEvent)
   }, [slug])
 
+  usePageMeta({
+    title: event ? t('seo_event_title', { title: event.title }) : t('loading_album_title'),
+    description: event?.description || (event ? t('seo_event_description', { title: event.title, location: event.location }) : t('loading_album_text')),
+    path: `/soiree/${slug}`,
+    image: event?.cover_image_url || '/og-default.jpg',
+    type: 'article',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'Event',
+      name: event?.title || slug,
+      startDate: event?.event_date || undefined,
+      eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+      eventStatus: 'https://schema.org/EventCompleted',
+      location: event?.location
+        ? {
+            '@type': 'Place',
+            name: event.location,
+          }
+        : undefined,
+      image: event?.cover_image_url ? [event.cover_image_url] : undefined,
+      description: event?.description || t('loading_album_text'),
+      url: buildPageUrl(`/soiree/${slug}`),
+    },
+  })
+
   if (!event) {
     return (
       <section className="section">
         <div className="empty-state">
-          <strong>Chargement de l’album…</strong>
-          <p>Les photos et informations de la soiree arrivent.</p>
+          <strong>{t('loading_album_title')}</strong>
+          <p>{t('loading_album_text')}</p>
         </div>
       </section>
     )
@@ -390,17 +667,23 @@ function EventPage() {
             : undefined,
         }}
       >
-        <span>{formatEventDate(event.event_date)}</span>
+        <span>{formatEventDate(event.event_date, language)}</span>
         <h1>{event.title}</h1>
         <p>{event.location}</p>
         {event.description ? <div className="album-hero__description">{event.description}</div> : null}
+        <ShareActions
+          title={t('seo_event_title', { title: event.title })}
+          text={event.description || t('seo_event_description', { title: event.title, location: event.location })}
+          path={`/soiree/${slug}`}
+          t={t}
+        />
       </div>
       {event.photos?.length ? (
         <PhotoGrid photos={event.photos} onOpen={setActivePhoto} />
       ) : (
         <div className="empty-state">
-          <strong>Aucune photo n’est encore disponible pour cet album.</strong>
-          <p>Ajoutez des images depuis l’administration pour publier la galerie.</p>
+          <strong>{t('no_photos_title')}</strong>
+          <p>{t('no_photos_text')}</p>
         </div>
       )}
       <PhotoLightbox
@@ -423,57 +706,59 @@ function StaticPage({ eyebrow, title, text }) {
   )
 }
 
-function AboutPage() {
+function AboutPage({ t }) {
+  usePageMeta({
+    title: t('seo_about_title'),
+    description: t('seo_about_description'),
+    path: '/a-propos',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'AboutPage',
+      name: t('seo_about_title'),
+      url: buildPageUrl('/a-propos'),
+      description: t('seo_about_description'),
+    },
+  })
+
   return (
     <section className="section">
       <SectionIntro
-        eyebrow="A propos"
-        title="Sauroraa, collectif d’evenements electroniques underground"
-        text="D’apres les informations publiques de sauroraa.be, Sauroraa est une structure professionnelle nee en Belgique en 2025, fondee par trois passionnes de musique electronique, avec une ambition immersive, independante et creative."
+        eyebrow={t('about_eyebrow')}
+        title={t('about_title')}
+        text={t('about_text')}
+        action={<ShareActions title={t('seo_about_title')} text={t('seo_about_description')} path="/a-propos" t={t} />}
       />
       <div className="content-grid">
         <article className="content-card">
-          <h3>Identite</h3>
-          <p>
-            Sauroraa ne se limite pas a l’organisation de soirees. Le collectif conçoit des
-            experiences ou le son, la lumiere et l’image se rencontrent pour construire un
-            univers nocturne fort, coherent et culturellement marque.
-          </p>
+          <h3>{t('identity_title')}</h3>
+          <p>{t('identity_text')}</p>
           <div className="tag-list">
             {aboutHighlights.map((item) => (
               <span key={item} className="info-tag">
-                {item}
+                {t(item)}
               </span>
             ))}
           </div>
         </article>
 
         <article className="content-card">
-          <h3>Mission</h3>
-          <p>
-            La mission de Sauroraa est de produire des evenements immersifs, valoriser des
-            artistes visionnaires et connecter les publics autour d’experiences sensibles et
-            memorables. Le collectif produit aussi du contenu visuel et digital pour des projets
-            a fort impact culturel.
-          </p>
-          <p>
-            Basee en Wallonie, la structure etend son activite a travers toute la Belgique avec
-            une ambition europeenne.
-          </p>
+          <h3>{t('mission_title')}</h3>
+          <p>{t('mission_text_1')}</p>
+          <p>{t('mission_text_2')}</p>
         </article>
       </div>
 
       <section className="inner-section">
         <SectionIntro
-          eyebrow="Equipe"
-          title="Une equipe soudee entre vision creative et logistique"
-          text="L’equipe publique presentee sur sauroraa.be met en avant une organisation claire entre direction technique, artistique, logistique et gestion artistes."
+          eyebrow={t('team_eyebrow')}
+          title={t('team_title')}
+          text={t('team_text')}
         />
         <div className="team-grid">
           {aboutTeam.map((member) => (
             <article key={member.name} className="team-card">
               <strong>{member.name}</strong>
-              <span>{member.role}</span>
+              <span>{t(member.roleKey)}</span>
             </article>
           ))}
         </div>
@@ -482,62 +767,174 @@ function AboutPage() {
   )
 }
 
-function ContactPage() {
+function ContactPage({ t }) {
+  usePageMeta({
+    title: t('seo_contact_title'),
+    description: t('seo_contact_description'),
+    path: '/contact',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'ContactPage',
+      name: t('seo_contact_title'),
+      url: buildPageUrl('/contact'),
+      description: t('seo_contact_description'),
+    },
+  })
+
   return (
     <section className="section">
       <SectionIntro
-        eyebrow="Contact"
-        title="Contact, mentions et informations utiles"
-        text="Pour toute question, proposition, booking ou demande de collaboration, l’adresse de contact publique de Sauroraa est disponible ci-dessous."
+        eyebrow={t('contact_eyebrow')}
+        title={t('contact_title')}
+        text={t('contact_text')}
+        action={<ShareActions title={t('seo_contact_title')} text={t('seo_contact_description')} path="/contact" t={t} />}
       />
       <div className="content-grid">
         <article className="content-card">
-          <h3>Contact principal</h3>
-          <p>
-            Vous pouvez contacter l’equipe Sauroraa pour les demandes generales, partenariats,
-            bookings, contenus visuels et informations liees aux evenements.
-          </p>
+          <h3>{t('main_contact_title')}</h3>
+          <p>{t('main_contact_text')}</p>
           <a className="button" href="mailto:contact@sauroraa.be">
             contact@sauroraa.be
           </a>
           <div className="contact-list">
             <div>
-              <strong>Email</strong>
+              <strong>{t('contact_email_label')}</strong>
               <span>contact@sauroraa.be</span>
             </div>
             <div>
-              <strong>Objet du site</strong>
-              <span>Archives photo officielles des soirees Sauroraa</span>
+              <strong>{t('contact_site_purpose')}</strong>
+              <span>{t('contact_site_purpose_value')}</span>
             </div>
             <div>
-              <strong>Zone d’activite</strong>
-              <span>Wallonie et Belgique</span>
+              <strong>{t('contact_area')}</strong>
+              <span>{t('contact_area_value')}</span>
             </div>
           </div>
         </article>
 
         <article className="content-card">
-          <h3>Mentions et droits a l’image</h3>
-          <p>
-            Les contenus photo publies sur cette plateforme sont lies aux evenements Sauroraa.
-            Toute demande relative a l’image, au retrait d’un contenu, a une rectification ou a
-            une utilisation non autorisee peut etre adressee directement a l’equipe via l’email
-            de contact.
-          </p>
-          <p>
-            Une page juridique plus detaillee pourra etre completee ensuite avec les mentions
-            legales, la politique de confidentialite et les conditions de publication des medias.
-          </p>
+          <h3>{t('image_rights_title')}</h3>
+          <p>{t('image_rights_text_1')}</p>
+          <p>{t('image_rights_text_2')}</p>
+          <Link className="button button--ghost" to="/mentions-legales">
+            {t('view_legal')}
+          </Link>
         </article>
       </div>
     </section>
   )
 }
 
-function AdminLoginPage({ onAuthenticated }) {
+function LegalPage({ t }) {
+  usePageMeta({
+    title: t('seo_legal_title'),
+    description: t('seo_legal_description'),
+    path: '/mentions-legales',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: t('seo_legal_title'),
+      url: buildPageUrl('/mentions-legales'),
+      description: t('seo_legal_description'),
+    },
+  })
+
+  return (
+    <section className="section">
+      <SectionIntro
+        eyebrow={t('legal_eyebrow')}
+        title={t('legal_title')}
+        text={t('legal_text')}
+        action={<ShareActions title={t('seo_legal_title')} text={t('seo_legal_description')} path="/mentions-legales" t={t} />}
+      />
+      <div className="content-grid">
+        <article className="content-card">
+          <h3>{t('legal_editor_title')}</h3>
+          <p>{t('legal_editor_text')}</p>
+          <div className="contact-list">
+            <div>
+              <strong>{t('legal_public_name')}</strong>
+              <span>SAURORAA</span>
+            </div>
+            <div>
+              <strong>{t('legal_public_form')}</strong>
+              <span>{t('legal_public_form_value')}</span>
+            </div>
+            <div>
+              <strong>{t('legal_public_zone')}</strong>
+              <span>{t('legal_public_zone_value')}</span>
+            </div>
+            <div>
+              <strong>{t('legal_public_contact')}</strong>
+              <span>contact@sauroraa.be</span>
+            </div>
+          </div>
+        </article>
+
+        <article className="content-card">
+          <h3>{t('legal_purpose_title')}</h3>
+          <p>{t('legal_purpose_text_1')}</p>
+          <p>{t('legal_purpose_text_2')}</p>
+        </article>
+
+        <article className="content-card">
+          <h3>{t('legal_ip_title')}</h3>
+          <p>{t('legal_ip_text_1')}</p>
+          <p>{t('legal_ip_text_2')}</p>
+        </article>
+
+        <article className="content-card">
+          <h3>{t('legal_image_title')}</h3>
+          <p>{t('legal_image_text_1')}</p>
+          <p>{t('legal_image_text_2')}</p>
+        </article>
+
+        <article className="content-card">
+          <h3>{t('legal_responsibility_title')}</h3>
+          <p>{t('legal_responsibility_text_1')}</p>
+          <p>{t('legal_responsibility_text_2')}</p>
+        </article>
+
+        <article className="content-card">
+          <h3>{t('legal_privacy_title')}</h3>
+          <p>{t('legal_privacy_text_1')}</p>
+          <p>{t('legal_privacy_text_2')}</p>
+        </article>
+
+        <article className="content-card">
+          <h3>{t('legal_missing_title')}</h3>
+          <p>{t('legal_missing_text_1')}</p>
+          <div className="tag-list">
+            <span className="info-tag">{t('legal_missing_company')}</span>
+            <span className="info-tag">{t('legal_missing_vat')}</span>
+            <span className="info-tag">{t('legal_missing_address')}</span>
+            <span className="info-tag">{t('legal_missing_director')}</span>
+            <span className="info-tag">{t('legal_missing_host')}</span>
+          </div>
+          <p>{t('legal_missing_text_2')}</p>
+        </article>
+      </div>
+    </section>
+  )
+}
+
+function AdminLoginPage({ onAuthenticated, t }) {
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
+
+  usePageMeta({
+    title: `${t('admin_login_title')} | Sauroraa Albums`,
+    description: t('admin_login_text'),
+    path: '/admin/login',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: `${t('admin_login_title')} | Sauroraa Albums`,
+      url: buildPageUrl('/admin/login'),
+      description: t('admin_login_text'),
+    },
+  })
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -546,7 +943,7 @@ function AdminLoginPage({ onAuthenticated }) {
       onAuthenticated(user)
       navigate('/admin')
     } catch (err) {
-      setError(err.response?.data?.message || 'Connexion impossible.')
+      setError(err.response?.data?.message || t('login_error'))
     }
   }
 
@@ -554,12 +951,12 @@ function AdminLoginPage({ onAuthenticated }) {
     <section className="section section--narrow">
       <form className="admin-card" onSubmit={handleSubmit}>
         <SectionIntro
-          eyebrow="Espace privé"
-          title="Connexion administration"
-          text="Accès réservé à l’équipe Sauroraa."
+          eyebrow={t('admin_space')}
+          title={t('admin_login_title')}
+          text={t('admin_login_text')}
         />
         <label>
-          Email
+          {t('email')}
           <input
             type="email"
             value={form.email}
@@ -567,7 +964,7 @@ function AdminLoginPage({ onAuthenticated }) {
           />
         </label>
         <label>
-          Mot de passe
+          {t('password')}
           <input
             type="password"
             value={form.password}
@@ -576,18 +973,31 @@ function AdminLoginPage({ onAuthenticated }) {
         </label>
         {error ? <p className="form-error">{error}</p> : null}
         <button className="button" type="submit">
-          Se connecter
+          {t('login')}
         </button>
       </form>
     </section>
   )
 }
 
-function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
+function AdminDashboardPage({ admin, onLogout, onAuthenticated, t, language }) {
   const navigate = useNavigate()
   const [events, setEvents] = useState([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
+
+  usePageMeta({
+    title: `${t('admin_dashboard_title')} | Sauroraa Albums`,
+    description: t('admin_dashboard_text'),
+    path: '/admin',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: `${t('admin_dashboard_title')} | Sauroraa Albums`,
+      url: buildPageUrl('/admin'),
+      description: t('admin_dashboard_text'),
+    },
+  })
 
   useEffect(() => {
     if (!admin) return
@@ -595,7 +1005,7 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
   }, [admin])
 
   if (!admin) {
-    return <AdminLoginPage onAuthenticated={onAuthenticated} />
+    return <AdminLoginPage onAuthenticated={onAuthenticated} t={t} />
   }
 
   async function handleDelete(id) {
@@ -622,13 +1032,13 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
     <section className="section">
       <div className="admin-toolbar">
         <SectionIntro
-          eyebrow="Administration"
-          title="Gestion des soirées"
-          text="Création, édition, publication et préparation des albums."
+          eyebrow={t('admin_eyebrow')}
+          title={t('admin_dashboard_title')}
+          text={t('admin_dashboard_text')}
         />
         <div className="admin-toolbar__actions">
           <button className="button button--ghost" type="button" onClick={() => navigate('/admin/new')}>
-            Nouvelle soirée
+            {t('new_event')}
           </button>
           <button
             className="button"
@@ -639,34 +1049,34 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
               navigate('/admin/login')
             }}
           >
-            Déconnexion
+            {t('logout')}
           </button>
         </div>
       </div>
       <div className="admin-stats">
         <article className="stat-card">
-          <span>Soirees</span>
+          <span>{t('events_count')}</span>
           <strong>{events.length}</strong>
         </article>
         <article className="stat-card">
-          <span>Publiees</span>
+          <span>{t('published_count')}</span>
           <strong>{publishedCount}</strong>
         </article>
         <article className="stat-card">
-          <span>Brouillons</span>
+          <span>{t('draft_count')}</span>
           <strong>{draftCount}</strong>
         </article>
         <article className="stat-card">
-          <span>Photos</span>
+          <span>{t('photos_count')}</span>
           <strong>{totalPhotos}</strong>
         </article>
       </div>
       <div className="admin-filters">
         <label>
-          Rechercher
+          {t('search')}
           <input
             type="search"
-            placeholder="Titre, lieu ou slug"
+            placeholder={t('search_placeholder')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -677,29 +1087,29 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
             type="button"
             onClick={() => setFilter('all')}
           >
-            Tout
+            {t('filter_all')}
           </button>
           <button
             className={`button button--ghost${filter === 'published' ? ' button--selected' : ''}`}
             type="button"
             onClick={() => setFilter('published')}
           >
-            Publiees
+            {t('published_count')}
           </button>
           <button
             className={`button button--ghost${filter === 'draft' ? ' button--selected' : ''}`}
             type="button"
             onClick={() => setFilter('draft')}
           >
-            Brouillons
+            {t('draft_count')}
           </button>
         </div>
       </div>
       <div className="admin-table">
         {filteredEvents.length === 0 ? (
           <div className="empty-state">
-            <strong>Aucune soiree ne correspond au filtre actuel.</strong>
-            <p>Commencez par creer une nouvelle soiree ou modifiez votre recherche.</p>
+            <strong>{t('no_matching_title')}</strong>
+            <p>{t('no_matching_text')}</p>
           </div>
         ) : filteredEvents.map((event) => (
           <div key={event.id} className="admin-row">
@@ -708,17 +1118,17 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
               <p>{event.location}</p>
               <small>{event.slug}</small>
             </div>
-            <span>{formatEventDate(event.event_date)}</span>
-            <span>{event.is_published ? 'Publié' : 'Brouillon'}</span>
+            <span>{formatEventDate(event.event_date, language)}</span>
+            <span>{event.is_published ? t('published') : t('draft')}</span>
             <div className="admin-row__actions">
               <Link className="button button--ghost" to={`/soiree/${event.slug}`}>
-                Voir
+                {t('see')}
               </Link>
               <button className="button button--ghost" type="button" onClick={() => navigate(`/admin/events/${event.id}`)}>
-                Éditer
+                {t('edit')}
               </button>
               <button className="button button--danger" type="button" onClick={() => handleDelete(event.id)}>
-                Supprimer
+                {t('delete')}
               </button>
             </div>
           </div>
@@ -728,12 +1138,25 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
   )
 }
 
-function AdminEventEditPage({ admin, onAuthenticated }) {
+function AdminEventEditPage({ admin, onAuthenticated, t }) {
   const { id } = useParams()
   const navigate = useNavigate()
   const [events, setEvents] = useState([])
   const [form, setForm] = useState(emptyEvent)
   const [status, setStatus] = useState('')
+
+  usePageMeta({
+    title: `${id ? t('edit_event_title') : t('create_event_title')} | Sauroraa Albums`,
+    description: t('edit_event_text'),
+    path: id ? `/admin/events/${id}` : '/admin/new',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: `${id ? t('edit_event_title') : t('create_event_title')} | Sauroraa Albums`,
+      url: buildPageUrl(id ? `/admin/events/${id}` : '/admin/new'),
+      description: t('edit_event_text'),
+    },
+  })
 
   useEffect(() => {
     if (!admin) return
@@ -753,7 +1176,7 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
   }, [admin, id])
 
   if (!admin) {
-    return <AdminLoginPage onAuthenticated={onAuthenticated} />
+    return <AdminLoginPage onAuthenticated={onAuthenticated} t={t} />
   }
 
   async function handleSubmit(event) {
@@ -764,7 +1187,7 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
     }
     const result = await saveEvent(payload, id)
     const nextId = id || result?.id
-    setStatus('Soirée enregistrée.')
+    setStatus(t('saved'))
     if (!id && nextId) navigate(`/admin/events/${nextId}`)
   }
 
@@ -772,7 +1195,7 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
     const files = event.target.files
     if (!files?.length || !id) return
     await uploadPhotos(id, files)
-    setStatus('Photos envoyées.')
+    setStatus(t('photos_sent'))
     const items = await fetchAdminEvents()
     setEvents(items)
   }
@@ -784,21 +1207,21 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
     <section className="section">
       <form className="admin-form" onSubmit={handleSubmit}>
         <SectionIntro
-          eyebrow="Administration"
-          title={id ? 'Modifier une soirée' : 'Créer une soirée'}
-          text="Préparez les métadonnées, le statut de publication et la galerie."
+          eyebrow={t('admin_eyebrow')}
+          title={id ? t('edit_event_title') : t('create_event_title')}
+          text={t('edit_event_text')}
         />
         <div className="form-grid">
           <label>
-            Titre
+            {t('title')}
             <input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
           </label>
           <label>
-            Slug URL
+            {t('slug')}
             <input value={form.slug || ''} onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))} />
           </label>
           <label>
-            Date
+            {t('date')}
             <input
               type="date"
               value={form.event_date}
@@ -806,12 +1229,12 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
             />
           </label>
           <label>
-            Lieu
+            {t('location')}
             <input value={form.location} onChange={(e) => setForm((prev) => ({ ...prev, location: e.target.value }))} />
           </label>
         </div>
         <label>
-          Description
+          {t('description')}
           <textarea
             rows="5"
             value={form.description || ''}
@@ -824,26 +1247,26 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
             checked={Boolean(form.is_published)}
             onChange={(e) => setForm((prev) => ({ ...prev, is_published: e.target.checked }))}
           />
-          Publier cette soirée
+          {t('publish_event')}
         </label>
         {id ? (
           <label className="upload-field">
-            Ajouter des photos
+            {t('upload_photos')}
             <input type="file" accept=".jpg,.jpeg,.png,.webp" multiple onChange={handleUpload} />
           </label>
-        ) : <p className="form-hint">Enregistrez d’abord la soiree pour activer l’upload des photos.</p>}
+        ) : <p className="form-hint">{t('save_first_hint')}</p>}
         <div className="admin-stats admin-stats--compact">
           <article className="stat-card">
-            <span>Photos</span>
+            <span>{t('photos_count')}</span>
             <strong>{photos.length}</strong>
           </article>
           <article className="stat-card">
-            <span>Publication</span>
-            <strong>{form.is_published ? 'Oui' : 'Non'}</strong>
+            <span>{t('publication')}</span>
+            <strong>{form.is_published ? t('yes') : t('no')}</strong>
           </article>
           <article className="stat-card">
-            <span>Couverture</span>
-            <strong>{form.cover_photo_id ? 'Definie' : 'A choisir'}</strong>
+            <span>{t('cover')}</span>
+            <strong>{form.cover_photo_id ? t('defined') : t('to_choose')}</strong>
           </article>
         </div>
         {photos.length ? (
@@ -862,10 +1285,10 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
         {status ? <p className="form-success">{status}</p> : null}
         <div className="hero__actions">
           <button className="button" type="submit">
-            Enregistrer
+            {t('save')}
           </button>
           <button className="button button--ghost" type="button" onClick={() => navigate('/admin')}>
-            Retour
+            {t('back')}
           </button>
         </div>
       </form>
@@ -875,28 +1298,71 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
 
 export default function App() {
   const [admin, setAdmin] = useState(null)
+  const [language, setLanguage] = useState('fr')
+  const [languageReady, setLanguageReady] = useState(false)
+  const [showLanguageModal, setShowLanguageModal] = useState(false)
+
+  const t = (key, vars = {}) => {
+    const current = translations[language] || translations.fr
+    const fallback = translations.fr[key]
+    const value = current[key] ?? fallback ?? key
+    if (typeof value === 'function') return value(vars)
+    if (typeof value !== 'string') return value
+    return value.replace(/\{(\w+)\}/g, (_, name) => vars[name] ?? `{${name}}`)
+  }
 
   useEffect(() => {
     fetchAdminMe().then(setAdmin).catch(() => setAdmin(null))
   }, [])
 
+  useEffect(() => {
+    const stored = window.localStorage.getItem('sauroraa-language')
+    if (stored && translations[stored]) {
+      setLanguage(stored)
+      setShowLanguageModal(false)
+    } else {
+      setShowLanguageModal(true)
+    }
+    setLanguageReady(true)
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.lang = language
+    if (languageReady) {
+      window.localStorage.setItem('sauroraa-language', language)
+    }
+  }, [language, languageReady])
+
+  function handleLanguageSelect(nextLanguage) {
+    setLanguage(nextLanguage)
+    setShowLanguageModal(false)
+  }
+
+  if (!languageReady) {
+    return null
+  }
+
   return (
-    <Layout admin={admin}>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/archives" element={<ArchivesPage />} />
-        <Route path="/archives/:year" element={<YearPage />} />
-        <Route path="/soiree/:slug" element={<EventPage />} />
-        <Route path="/a-propos" element={<AboutPage />} />
-        <Route path="/contact" element={<ContactPage />} />
-        <Route path="/admin/login" element={<AdminLoginPage onAuthenticated={setAdmin} />} />
-        <Route
-          path="/admin"
-          element={<AdminDashboardPage admin={admin} onLogout={() => setAdmin(null)} onAuthenticated={setAdmin} />}
-        />
-        <Route path="/admin/new" element={<AdminEventEditPage admin={admin} onAuthenticated={setAdmin} />} />
-        <Route path="/admin/events/:id" element={<AdminEventEditPage admin={admin} onAuthenticated={setAdmin} />} />
-      </Routes>
-    </Layout>
+    <>
+      {showLanguageModal ? <LanguageModal onSelect={handleLanguageSelect} t={t} /> : null}
+      <Layout admin={admin} t={t} language={language} setLanguage={handleLanguageSelect}>
+        <Routes>
+          <Route path="/" element={<HomePage t={t} language={language} />} />
+          <Route path="/archives" element={<ArchivesPage t={t} />} />
+          <Route path="/archives/:year" element={<YearPage t={t} language={language} />} />
+          <Route path="/soiree/:slug" element={<EventPage t={t} language={language} />} />
+          <Route path="/a-propos" element={<AboutPage t={t} />} />
+          <Route path="/contact" element={<ContactPage t={t} />} />
+          <Route path="/mentions-legales" element={<LegalPage t={t} />} />
+          <Route path="/admin/login" element={<AdminLoginPage onAuthenticated={setAdmin} t={t} />} />
+          <Route
+            path="/admin"
+            element={<AdminDashboardPage admin={admin} onLogout={() => setAdmin(null)} onAuthenticated={setAdmin} t={t} language={language} />}
+          />
+          <Route path="/admin/new" element={<AdminEventEditPage admin={admin} onAuthenticated={setAdmin} t={t} />} />
+          <Route path="/admin/events/:id" element={<AdminEventEditPage admin={admin} onAuthenticated={setAdmin} t={t} />} />
+        </Routes>
+      </Layout>
+    </>
   )
 }
