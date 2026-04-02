@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import {
   deletePhoto,
@@ -15,7 +15,6 @@ import {
   uploadPhotos,
 } from './api'
 import { translations } from './i18n'
-import { getUploadQueue, removeUploadQueueItems, replaceUploadQueue } from './uploadQueue'
 
 const aboutHighlights = [
   'about_highlight_1',
@@ -1154,7 +1153,6 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   const [pendingCoverPreview, setPendingCoverPreview] = useState('')
   const [pendingPhotoFiles, setPendingPhotoFiles] = useState([])
   const [coverUploadProgress, setCoverUploadProgress] = useState(0)
-  const resumeStartedRef = useRef('')
 
   usePageMeta({
     title: `${id ? t('edit_event_title') : t('create_event_title')} | Sauroraa Albums`,
@@ -1183,34 +1181,16 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   }, [pendingCoverPreview])
 
   useEffect(() => {
-    if (!admin || !id || isUploadingPhotos || resumeStartedRef.current === String(id)) return
+    if (!isUploadingPhotos && !isUploadingCover) return undefined
 
-    let cancelled = false
-
-    async function restorePendingUploads() {
-      const queued = await getUploadQueue(id, 'gallery')
-      if (cancelled || !queued.length) return
-
-      resumeStartedRef.current = String(id)
-      const restoredFiles = queued.map((item) => ({
-        id: item.id,
-        name: item.name,
-        size: item.size,
-        file: item.file,
-        progress: 0,
-        status: 'pending',
-      }))
-      setPendingPhotoFiles(restoredFiles)
-      setStatus(t('upload_resume'))
-      await runPhotoUpload(restoredFiles)
+    function handleBeforeUnload(event) {
+      event.preventDefault()
+      event.returnValue = ''
     }
 
-    restorePendingUploads().catch(() => {})
-
-    return () => {
-      cancelled = true
-    }
-  }, [admin, id, isUploadingPhotos, t])
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isUploadingCover, isUploadingPhotos])
 
   if (!admin) {
     return <AdminLoginPage onAuthenticated={onAuthenticated} t={t} />
@@ -1325,7 +1305,6 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
         },
         onFileComplete: async ({ index }) => {
           const currentItem = queueItems[index]
-          await removeUploadQueueItems([currentItem.id])
           setPendingPhotoFiles((current) =>
             current.map((item) =>
               item.id === currentItem.id ? { ...item, progress: 100, status: 'done' } : item,
@@ -1349,12 +1328,11 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     const files = event.target.files
     if (!files?.length || !id) return
     setStatus('')
-    const stored = await replaceUploadQueue(id, 'gallery', Array.from(files))
-    const selectedFiles = stored.map((item) => ({
-      id: item.id,
-      name: item.name,
-      size: item.size,
-      file: item.file,
+    const selectedFiles = Array.from(files).map((file, index) => ({
+      id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+      name: file.name,
+      size: file.size,
+      file,
       progress: 0,
       status: 'pending',
     }))
