@@ -1087,12 +1087,42 @@ img {
   text-align: center;
 }
 
+.upload-summary {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.upload-summary__stats {
+  display: grid;
+  gap: 4px;
+}
+
+.upload-summary__stats strong {
+  font-family: "Manrope", sans-serif;
+  font-size: 0.95rem;
+}
+
+.upload-summary__stats span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .upload-progress {
   width: 100%;
   height: 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
+}
+
+.upload-progress--summary {
+  height: 10px;
 }
 
 .upload-progress__bar {

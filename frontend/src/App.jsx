@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import {
   deletePhoto,
@@ -15,6 +15,7 @@ import {
   uploadPhotos,
 } from './api'
 import { translations } from './i18n'
+import { getUploadQueue, removeUploadQueueItems, replaceUploadQueue } from './uploadQueue'
 
 const aboutHighlights = [
   'about_highlight_1',
@@ -1153,6 +1154,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   const [pendingCoverPreview, setPendingCoverPreview] = useState('')
   const [pendingPhotoFiles, setPendingPhotoFiles] = useState([])
   const [coverUploadProgress, setCoverUploadProgress] = useState(0)
+  const resumeStartedRef = useRef('')
 
   usePageMeta({
     title: `${id ? t('edit_event_title') : t('create_event_title')} | Sauroraa Albums`,
@@ -1179,6 +1181,36 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
       }
     }
   }, [pendingCoverPreview])
+
+  useEffect(() => {
+    if (!admin || !id || isUploadingPhotos || resumeStartedRef.current === String(id)) return
+
+    let cancelled = false
+
+    async function restorePendingUploads() {
+      const queued = await getUploadQueue(id, 'gallery')
+      if (cancelled || !queued.length) return
+
+      resumeStartedRef.current = String(id)
+      const restoredFiles = queued.map((item) => ({
+        id: item.id,
+        name: item.name,
+        size: item.size,
+        file: item.file,
+        progress: 0,
+        status: 'pending',
+      }))
+      setPendingPhotoFiles(restoredFiles)
+      setStatus(t('upload_resume'))
+      await runPhotoUpload(restoredFiles)
+    }
+
+    restorePendingUploads().catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [admin, id, isUploadingPhotos, t])
 
   if (!admin) {
     return <AdminLoginPage onAuthenticated={onAuthenticated} t={t} />
@@ -1278,29 +1310,26 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     handleCoverUpload(event)
   }
 
-  async function handleUploadPhotos(event) {
-    const files = event.target.files
-    if (!files?.length || !id) return
+  async function runPhotoUpload(queueItems) {
     setError('')
-    setStatus('')
-    const selectedFiles = Array.from(files).map((file) => ({
-      name: file.name,
-      size: file.size,
-      progress: 0,
-      status: 'pending',
-    }))
-    setPendingPhotoFiles(selectedFiles)
     setIsUploadingPhotos(true)
     try {
-      await uploadPhotos(id, files, {
+      await uploadPhotos(id, queueItems.map((item) => item.file), {
         onFileProgress: ({ index, percent }) => {
+          const currentItem = queueItems[index]
           setPendingPhotoFiles((current) =>
-            current.map((item, itemIndex) => (itemIndex === index ? { ...item, progress: percent, status: 'uploading' } : item)),
+            current.map((item) =>
+              item.id === currentItem.id ? { ...item, progress: percent, status: 'uploading' } : item,
+            ),
           )
         },
-        onFileComplete: ({ index }) => {
+        onFileComplete: async ({ index }) => {
+          const currentItem = queueItems[index]
+          await removeUploadQueueItems([currentItem.id])
           setPendingPhotoFiles((current) =>
-            current.map((item, itemIndex) => (itemIndex === index ? { ...item, progress: 100, status: 'done' } : item)),
+            current.map((item) =>
+              item.id === currentItem.id ? { ...item, progress: 100, status: 'done' } : item,
+            ),
           )
         },
       })
@@ -1312,9 +1341,26 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
         current.map((item) => (item.status === 'done' ? item : { ...item, status: 'error' })),
       )
     } finally {
-      event.target.value = ''
       setIsUploadingPhotos(false)
     }
+  }
+
+  async function handleUploadPhotos(event) {
+    const files = event.target.files
+    if (!files?.length || !id) return
+    setStatus('')
+    const stored = await replaceUploadQueue(id, 'gallery', Array.from(files))
+    const selectedFiles = stored.map((item) => ({
+      id: item.id,
+      name: item.name,
+      size: item.size,
+      file: item.file,
+      progress: 0,
+      status: 'pending',
+    }))
+    setPendingPhotoFiles(selectedFiles)
+    await runPhotoUpload(selectedFiles)
+    event.target.value = ''
   }
 
   async function handlePhotoDelete(photoId) {
@@ -1352,6 +1398,15 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   const current = events.find((item) => String(item.id) === String(id))
   const photos = current?.photos || []
   const coverPhoto = photos.find((photo) => String(photo.id) === String(form.cover_photo_id))
+  const uploadDoneCount = pendingPhotoFiles.filter((file) => file.status === 'done').length
+  const uploadActiveCount = pendingPhotoFiles.filter((file) => file.status === 'uploading').length
+  const uploadErrorCount = pendingPhotoFiles.filter((file) => file.status === 'error').length
+  const uploadRemainingCount = pendingPhotoFiles.filter((file) => file.status !== 'done').length
+  const uploadOverallProgress = pendingPhotoFiles.length
+    ? Math.round(
+        pendingPhotoFiles.reduce((sum, file) => sum + (file.progress || 0), 0) / pendingPhotoFiles.length,
+      )
+    : 0
 
   return (
     <section className="section">
@@ -1452,6 +1507,15 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
               </label>
               {pendingPhotoFiles.length ? (
                 <div className="selected-files">
+                  <div className="upload-summary">
+                    <div className="upload-summary__stats">
+                      <strong>{t('files_remaining', { count: uploadRemainingCount })}</strong>
+                      <span>{t('files_summary', { total: pendingPhotoFiles.length, done: uploadDoneCount, active: uploadActiveCount, error: uploadErrorCount })}</span>
+                    </div>
+                    <div className="upload-progress upload-progress--summary">
+                      <div className="upload-progress__bar" style={{ width: `${uploadOverallProgress}%` }} />
+                    </div>
+                  </div>
                   {pendingPhotoFiles.slice(0, 8).map((file) => (
                     <div key={`${file.name}-${file.size}`} className="selected-file">
                       <strong>{file.name}</strong>
