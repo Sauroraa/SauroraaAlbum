@@ -14,6 +14,7 @@ import {
   saveEvent,
   uploadPhotos,
 } from './api'
+import faviconImage from './images/favicon.png'
 import { translations } from './i18n'
 
 const aboutHighlights = [
@@ -98,13 +99,12 @@ function usePageMeta({ title, description, path, image, type = 'website', jsonLd
     const twitterDescription = ensureMeta('meta[name="twitter:description"]', { name: 'twitter:description' })
     twitterDescription.setAttribute('content', description)
 
-    if (image) {
-      const absoluteImage = image.startsWith('http') ? image : buildPageUrl(image)
-      const ogImage = ensureMeta('meta[property="og:image"]', { property: 'og:image' })
-      ogImage.setAttribute('content', absoluteImage)
-      const twitterImage = ensureMeta('meta[name="twitter:image"]', { name: 'twitter:image' })
-      twitterImage.setAttribute('content', absoluteImage)
-    }
+    const resolvedImage = image || faviconImage
+    const absoluteImage = resolvedImage.startsWith('http') ? resolvedImage : buildPageUrl(resolvedImage)
+    const ogImage = ensureMeta('meta[property="og:image"]', { property: 'og:image' })
+    ogImage.setAttribute('content', absoluteImage)
+    const twitterImage = ensureMeta('meta[name="twitter:image"]', { name: 'twitter:image' })
+    twitterImage.setAttribute('content', absoluteImage)
 
     let canonical = document.head.querySelector('link[rel="canonical"]')
     if (!canonical) {
@@ -113,6 +113,23 @@ function usePageMeta({ title, description, path, image, type = 'website', jsonLd
       document.head.appendChild(canonical)
     }
     canonical.setAttribute('href', canonicalHref)
+
+    let favicon = document.head.querySelector('link[rel="icon"]')
+    if (!favicon) {
+      favicon = document.createElement('link')
+      favicon.setAttribute('rel', 'icon')
+      document.head.appendChild(favicon)
+    }
+    favicon.setAttribute('type', 'image/png')
+    favicon.setAttribute('href', buildPageUrl(faviconImage))
+
+    let appleTouchIcon = document.head.querySelector('link[rel="apple-touch-icon"]')
+    if (!appleTouchIcon) {
+      appleTouchIcon = document.createElement('link')
+      appleTouchIcon.setAttribute('rel', 'apple-touch-icon')
+      document.head.appendChild(appleTouchIcon)
+    }
+    appleTouchIcon.setAttribute('href', buildPageUrl(faviconImage))
 
     let jsonLdScript = document.head.querySelector('script[data-seo-jsonld="true"]')
     if (!jsonLdScript) {
@@ -223,7 +240,7 @@ function Layout({ children, admin, t, language, setLanguage }) {
     <div className="shell">
       <header className="site-header">
         <Link className="brand" to="/">
-          <span className="brand-mark" />
+          <img className="brand-mark" src={faviconImage} alt="Sauroraa Albums" />
           <div>
             <strong>Sauroraa</strong>
             <span>Albums</span>
@@ -389,7 +406,7 @@ function HomePage({ t, language }) {
     title: t('seo_home_title'),
     description: t('seo_home_description'),
     path: '/',
-    image: featuredEvent?.cover_image_url || '/og-default.jpg',
+    image: featuredEvent?.cover_image_url || faviconImage,
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'WebSite',
@@ -575,7 +592,7 @@ function YearPage({ t, language }) {
     title: t('seo_year_title', { year }),
     description: t('seo_year_description', { year }),
     path: `/archives/${year}`,
-    image: events[0]?.cover_image_url || '/og-default.jpg',
+    image: events[0]?.cover_image_url || faviconImage,
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
@@ -626,7 +643,7 @@ function EventPage({ t, language }) {
     title: event ? t('seo_event_title', { title: event.title }) : t('loading_album_title'),
     description: event?.description || (event ? t('seo_event_description', { title: event.title, location: event.location }) : t('loading_album_text')),
     path: `/soiree/${slug}`,
-    image: event?.cover_image_url || '/og-default.jpg',
+    image: event?.cover_image_url || faviconImage,
     type: 'article',
     jsonLd: {
       '@context': 'https://schema.org',

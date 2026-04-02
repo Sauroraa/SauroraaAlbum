@@ -115,14 +115,12 @@ img {
 }
 
 .brand-mark {
-  position: relative;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95), rgba(255,255,255,0.18) 30%, transparent 56%),
-    conic-gradient(from 80deg, transparent 0 54deg, var(--toxic-cyan) 54deg 160deg, transparent 160deg 220deg, var(--aurora-fuchsia) 220deg 310deg, transparent 310deg);
-  box-shadow: 0 0 22px rgba(36, 241, 224, 0.45), 0 0 44px rgba(255, 47, 174, 0.25);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: 0 0 auto;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
 }
 
 .brand strong,
@@ -144,6 +142,7 @@ img {
   font-size: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.16em;
+  line-height: 1;
 }
 
 .brand span,
