@@ -414,6 +414,18 @@ function PhotoLightbox({ photos, index, onClose, onMove, onDownload, t }) {
     return () => window.removeEventListener('keydown', onKeydown)
   }, [index, onClose, onMove])
 
+  useEffect(() => {
+    if (index === null) return undefined
+
+    const previousOverflow = document.body.style.overflow
+    window.scrollTo(0, 0)
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [index])
+
   if (index === null || !photos[index]) return null
 
   const photo = photos[index]

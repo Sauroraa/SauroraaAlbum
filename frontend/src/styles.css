@@ -871,10 +871,11 @@ img {
   inset: 0;
   z-index: 30;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 16px;
   padding: 18px;
+  overflow-y: auto;
   background: radial-gradient(circle at top, rgba(108, 43, 255, 0.12), transparent 24%), rgba(2, 2, 4, 0.96);
   backdrop-filter: blur(12px);
 }
@@ -885,6 +886,7 @@ img {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  margin-top: 0;
 }
 
 .lightbox__media {
@@ -1381,6 +1383,7 @@ img {
   }
 
   .lightbox {
+    align-items: flex-start;
     padding: 12px;
     gap: 0;
   }
@@ -1444,6 +1447,7 @@ img {
   }
 
   .lightbox {
+    align-items: flex-start;
     padding: 10px;
   }
 
@@ -1467,6 +1471,7 @@ img {
   .lightbox__panel {
     width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
+    margin-top: 0;
   }
 
   .lightbox__media {
