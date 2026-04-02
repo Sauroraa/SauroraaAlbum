@@ -129,10 +129,17 @@ class PublicController
     private function photosForEvent(int $eventId): array
     {
         $photos = $this->db->prepare(
-            'SELECT id, alt_text, position, filepath, thumbnail_path
+            'SELECT p.id,
+                    p.alt_text,
+                    p.position,
+                    p.filepath,
+                    p.thumbnail_path,
+                    (SELECT COUNT(*) FROM photo_views pv WHERE pv.photo_id = p.id) AS views_count,
+                    (SELECT COUNT(*) FROM photo_downloads pd WHERE pd.photo_id = p.id) AS downloads_count
              FROM photos
-             WHERE event_id = :event_id AND is_visible = 1
-             ORDER BY position ASC, id ASC'
+             AS p
+             WHERE p.event_id = :event_id AND p.is_visible = 1
+             ORDER BY p.position ASC, p.id ASC'
         );
         $photos->execute(['event_id' => $eventId]);
 
@@ -143,6 +150,8 @@ class PublicController
                 'position' => (int) $photo['position'],
                 'url' => assetUrl('uploads/' . $photo['filepath']),
                 'thumbnail_url' => assetUrl('uploads/' . $photo['thumbnail_path']),
+                'views_count' => (int) ($photo['views_count'] ?? 0),
+                'downloads_count' => (int) ($photo['downloads_count'] ?? 0),
             ];
         }, $photos->fetchAll());
     }

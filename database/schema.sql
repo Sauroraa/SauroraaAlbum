@@ -42,3 +42,41 @@ CREATE TABLE IF NOT EXISTS settings (
     setting_key VARCHAR(190) NOT NULL UNIQUE,
     setting_value TEXT NULL
 );
+
+CREATE TABLE IF NOT EXISTS site_visits (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    visitor_key VARCHAR(190) NOT NULL,
+    page_path VARCHAR(255) NOT NULL,
+    visit_date DATE NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_site_visit_per_day (visitor_key, visit_date),
+    KEY idx_site_visits_date (visit_date)
+);
+
+CREATE TABLE IF NOT EXISTS photo_views (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    photo_id INT UNSIGNED NOT NULL,
+    event_id INT UNSIGNED NOT NULL,
+    visitor_key VARCHAR(190) NOT NULL,
+    view_date DATE NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_photo_view_per_day (photo_id, visitor_key, view_date),
+    KEY idx_photo_views_date (view_date),
+    KEY idx_photo_views_event (event_id),
+    CONSTRAINT fk_photo_views_photo FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE,
+    CONSTRAINT fk_photo_views_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS photo_downloads (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    photo_id INT UNSIGNED NOT NULL,
+    event_id INT UNSIGNED NOT NULL,
+    visitor_key VARCHAR(190) NOT NULL,
+    download_date DATE NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_photo_download_per_day (photo_id, visitor_key, download_date),
+    KEY idx_photo_downloads_date (download_date),
+    KEY idx_photo_downloads_event (event_id),
+    CONSTRAINT fk_photo_downloads_photo FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE,
+    CONSTRAINT fk_photo_downloads_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+);

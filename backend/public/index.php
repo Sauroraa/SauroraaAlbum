@@ -6,6 +6,7 @@ use App\Auth;
 use App\Controllers\AdminAuthController;
 use App\Controllers\AdminEventController;
 use App\Controllers\AdminPhotoController;
+use App\Controllers\AnalyticsController;
 use App\Controllers\PublicController;
 use App\Database;
 
@@ -50,6 +51,7 @@ $public = new PublicController($db);
 $adminAuth = new AdminAuthController($db);
 $adminEvents = new AdminEventController($db, $public);
 $adminPhotos = new AdminPhotoController($db);
+$analytics = new AnalyticsController($db);
 
 $method = $_SERVER['REQUEST_METHOD'];
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
@@ -70,6 +72,22 @@ if (preg_match('#^/api/events/([a-z0-9-]+)$#', $uri, $matches) && $method === 'G
     $public->eventBySlug($matches[1]);
 }
 
+if ($uri === '/api/analytics/site' && $method === 'GET') {
+    $analytics->publicSummary();
+}
+
+if ($uri === '/api/analytics/visit' && $method === 'POST') {
+    $analytics->trackVisit(requestJson());
+}
+
+if ($uri === '/api/analytics/photo-view' && $method === 'POST') {
+    $analytics->trackPhotoView(requestJson());
+}
+
+if ($uri === '/api/analytics/photo-download' && $method === 'POST') {
+    $analytics->trackPhotoDownload(requestJson());
+}
+
 if ($uri === '/api/admin/me' && $method === 'GET') {
     $adminAuth->me();
 }
@@ -86,6 +104,11 @@ if ($uri === '/api/admin/logout' && $method === 'POST') {
 if ($uri === '/api/admin/events' && $method === 'GET') {
     Auth::requireAdmin();
     $adminEvents->index();
+}
+
+if ($uri === '/api/admin/analytics' && $method === 'GET') {
+    Auth::requireAdmin();
+    $analytics->summary();
 }
 
 if ($uri === '/api/admin/events' && $method === 'POST') {
@@ -119,4 +142,3 @@ if (preg_match('#^/api/admin/photos/(\d+)$#', $uri, $matches) && $method === 'DE
 }
 
 jsonResponse(['message' => 'Route introuvable.'], 404);
-

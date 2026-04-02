@@ -25,6 +25,23 @@ export async function fetchEvent(slug) {
   return data.data
 }
 
+export async function fetchSiteAnalytics() {
+  const { data } = await api.get('/analytics/site')
+  return data.data
+}
+
+export async function trackVisit(payload) {
+  await api.post('/analytics/visit', payload)
+}
+
+export async function trackPhotoView(payload) {
+  await api.post('/analytics/photo-view', payload)
+}
+
+export async function trackPhotoDownload(payload) {
+  await api.post('/analytics/photo-download', payload)
+}
+
 export async function fetchAdminMe() {
   const { data } = await api.get('/admin/me')
   return data.data
@@ -41,6 +58,11 @@ export async function logoutAdmin() {
 
 export async function fetchAdminEvents() {
   const { data } = await api.get('/admin/events')
+  return data.data
+}
+
+export async function fetchAdminAnalytics() {
+  const { data } = await api.get('/admin/analytics')
   return data.data
 }
 

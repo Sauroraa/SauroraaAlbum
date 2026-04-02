@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
+  fetchAdminAnalytics,
   deletePhoto,
   deleteEvent,
   fetchAdminEvents,
+  fetchSiteAnalytics,
   fetchAdminMe,
   fetchEvent,
   fetchEvents,
@@ -12,6 +14,9 @@ import {
   loginAdmin,
   logoutAdmin,
   saveEvent,
+  trackPhotoDownload,
+  trackPhotoView,
+  trackVisit,
   uploadPhotos,
 } from './api'
 import faviconImage from './images/favicon.png'
@@ -56,6 +61,16 @@ function getSiteOrigin() {
 
 function buildPageUrl(pathname = '/') {
   return new URL(pathname, getSiteOrigin()).toString()
+}
+
+function getVisitorKey() {
+  if (typeof window === 'undefined') return 'server'
+  const storageKey = 'sauroraa_album_visitor_key'
+  const existing = window.localStorage.getItem(storageKey)
+  if (existing) return existing
+  const created = `visitor-${Math.random().toString(36).slice(2)}-${Date.now()}`
+  window.localStorage.setItem(storageKey, created)
+  return created
 }
 
 function ensureMeta(selector, attributes) {
@@ -156,6 +171,20 @@ function formatEventDate(value, language = 'fr') {
     nl: 'nl-BE',
   }
   return date.toLocaleDateString(localeMap[language] || 'fr-BE')
+}
+
+function SiteVisitTracker() {
+  const location = useLocation()
+
+  useEffect(() => {
+    const visitorKey = getVisitorKey()
+    trackVisit({
+      visitor_key: visitorKey,
+      page_path: location.pathname || '/',
+    }).catch(() => {})
+  }, [location.pathname])
+
+  return null
 }
 
 function ShareActions({ title, text, path, t }) {
@@ -344,7 +373,7 @@ function YearCard({ year, t }) {
   )
 }
 
-function PhotoGrid({ photos, onOpen }) {
+function PhotoGrid({ photos, onOpen, t }) {
   return (
     <div className="photo-grid">
       {photos.map((photo, index) => (
@@ -361,13 +390,17 @@ function PhotoGrid({ photos, onOpen }) {
             loading="lazy"
             decoding="async"
           />
+          <div className="photo-tile__meta">
+            <span>{t('views_short', { count: photo.views_count || 0 })}</span>
+            <span>{t('downloads_short', { count: photo.downloads_count || 0 })}</span>
+          </div>
         </button>
       ))}
     </div>
   )
 }
 
-function PhotoLightbox({ photos, index, onClose, onMove }) {
+function PhotoLightbox({ photos, index, onClose, onMove, onDownload, t }) {
   useEffect(() => {
     if (index === null) return undefined
 
@@ -383,12 +416,70 @@ function PhotoLightbox({ photos, index, onClose, onMove }) {
 
   if (index === null || !photos[index]) return null
 
+  const photo = photos[index]
+
+  async function handleSharePhoto() {
+    const shareUrl = photo.url
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: photo.alt_text || 'Sauroraa Albums',
+          url: shareUrl,
+        })
+        return
+      } catch {}
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+    } catch {}
+  }
+
+  async function handleDownloadPhoto() {
+    try {
+      await trackPhotoDownload({
+        visitor_key: getVisitorKey(),
+        photo_id: photo.id,
+      })
+    } catch {}
+    onDownload?.(photo.id)
+
+    const link = document.createElement('a')
+    link.href = photo.url
+    link.download = (photo.alt_text || `sauroraa-photo-${photo.id}`).replace(/\s+/g, '-').toLowerCase()
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  }
+
   return (
     <div className="lightbox" onClick={onClose}>
       <button className="lightbox__nav" type="button" onClick={(e) => { e.stopPropagation(); onMove(-1) }}>
         ‹
       </button>
-      <img src={photos[index].url} alt={photos[index].alt_text || ''} onClick={(e) => e.stopPropagation()} />
+      <div className="lightbox__panel" onClick={(e) => e.stopPropagation()}>
+        <div className="lightbox__media">
+          <img src={photo.url} alt={photo.alt_text || ''} />
+        </div>
+        <div className="lightbox__info">
+          <div>
+            <strong>{photo.alt_text || t('photo_label', { index: index + 1 })}</strong>
+            <span>{t('photo_position', { current: index + 1, total: photos.length })}</span>
+          </div>
+          <div className="lightbox__stats">
+            <span>{t('views_total', { count: photo.views_count || 0 })}</span>
+            <span>{t('downloads_total', { count: photo.downloads_count || 0 })}</span>
+          </div>
+          <div className="lightbox__actions">
+            <button className="button button--ghost" type="button" onClick={handleSharePhoto}>
+              {t('share_image')}
+            </button>
+            <button className="button" type="button" onClick={handleDownloadPhoto}>
+              {t('download_image')}
+            </button>
+          </div>
+        </div>
+      </div>
       <button className="lightbox__nav" type="button" onClick={(e) => { e.stopPropagation(); onMove(1) }}>
         ›
       </button>
@@ -399,6 +490,7 @@ function PhotoLightbox({ photos, index, onClose, onMove }) {
 function HomePage({ t, language }) {
   const [years, setYears] = useState([])
   const [events, setEvents] = useState([])
+  const [siteAnalytics, setSiteAnalytics] = useState(null)
   const featuredEvent = events[0] || null
   const secondaryEvents = events.slice(1, 4)
 
@@ -420,6 +512,7 @@ function HomePage({ t, language }) {
   useEffect(() => {
     fetchYears().then(setYears)
     fetchEvents().then((items) => setEvents(items.slice(0, 4)))
+    fetchSiteAnalytics().then(setSiteAnalytics).catch(() => {})
   }, [])
 
   return (
@@ -456,8 +549,8 @@ function HomePage({ t, language }) {
               <span>{t('metric_recent')}</span>
             </div>
             <div>
-              <strong>2026</strong>
-              <span>{t('metric_active')}</span>
+              <strong>{siteAnalytics?.visitors_total || 0}</strong>
+              <span>{t('metric_visitors')}</span>
             </div>
           </div>
           <ShareActions
@@ -634,10 +727,28 @@ function EventPage({ t, language }) {
   const { slug } = useParams()
   const [event, setEvent] = useState(null)
   const [activePhoto, setActivePhoto] = useState(null)
+  const activePhotoId = activePhoto === null ? null : event?.photos?.[activePhoto]?.id || null
 
   useEffect(() => {
     fetchEvent(slug).then(setEvent)
   }, [slug])
+
+  useEffect(() => {
+    if (!activePhotoId) return
+    trackPhotoView({
+      visitor_key: getVisitorKey(),
+      photo_id: activePhotoId,
+    }).catch(() => {})
+    setEvent((current) => {
+      if (!current?.photos?.[activePhoto]) return current
+      const nextPhotos = current.photos.map((photo, photoIndex) =>
+        photoIndex === activePhoto
+          ? { ...photo, views_count: (photo.views_count || 0) + 1 }
+          : photo,
+      )
+      return { ...current, photos: nextPhotos }
+    })
+  }, [activePhoto, activePhotoId])
 
   usePageMeta({
     title: event ? t('seo_event_title', { title: event.title }) : t('loading_album_title'),
@@ -697,7 +808,7 @@ function EventPage({ t, language }) {
         />
       </div>
       {event.photos?.length ? (
-        <PhotoGrid photos={event.photos} onOpen={setActivePhoto} />
+        <PhotoGrid photos={event.photos} onOpen={setActivePhoto} t={t} />
       ) : (
         <div className="empty-state">
           <strong>{t('no_photos_title')}</strong>
@@ -711,6 +822,17 @@ function EventPage({ t, language }) {
         onMove={(delta) =>
           setActivePhoto((current) => (current === null ? null : (current + delta + event.photos.length) % event.photos.length))
         }
+        onDownload={(photoId) =>
+          setEvent((current) => current ? ({
+            ...current,
+            photos: current.photos.map((photo) =>
+              photo.id === photoId
+                ? { ...photo, downloads_count: (photo.downloads_count || 0) + 1 }
+                : photo,
+            ),
+          }) : current)
+        }
+        t={t}
       />
     </section>
   )
@@ -1001,6 +1123,7 @@ function AdminLoginPage({ onAuthenticated, t }) {
 function AdminDashboardPage({ admin, onLogout, onAuthenticated, t, language }) {
   const navigate = useNavigate()
   const [events, setEvents] = useState([])
+  const [analytics, setAnalytics] = useState(null)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
 
@@ -1020,6 +1143,7 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated, t, language }) {
   useEffect(() => {
     if (!admin) return
     fetchAdminEvents().then(setEvents).catch(() => {})
+    fetchAdminAnalytics().then(setAnalytics).catch(() => {})
   }, [admin])
 
   if (!admin) {
@@ -1088,6 +1212,18 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated, t, language }) {
           <span>{t('photos_count')}</span>
           <strong>{totalPhotos}</strong>
         </article>
+        <article className="stat-card">
+          <span>{t('metric_visitors')}</span>
+          <strong>{analytics?.visitors_total || 0}</strong>
+        </article>
+        <article className="stat-card">
+          <span>{t('views_label')}</span>
+          <strong>{analytics?.photo_views_total || 0}</strong>
+        </article>
+        <article className="stat-card">
+          <span>{t('downloads_label')}</span>
+          <strong>{analytics?.downloads_total || 0}</strong>
+        </article>
       </div>
       <div className="admin-filters">
         <label>
@@ -1152,6 +1288,45 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated, t, language }) {
           </div>
         ))}
       </div>
+      {analytics ? (
+        <div className="admin-analytics-grid">
+          <article className="content-card">
+            <h3>{t('top_events_title')}</h3>
+            <div className="analytics-list">
+              {analytics.top_events?.length ? analytics.top_events.map((item) => (
+                <div key={item.id} className="analytics-row">
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{item.slug}</span>
+                  </div>
+                  <div className="analytics-row__stats">
+                    <span>{t('views_short', { count: item.views_count })}</span>
+                    <span>{t('downloads_short', { count: item.downloads_count })}</span>
+                  </div>
+                </div>
+              )) : <p>{t('no_analytics_data')}</p>}
+            </div>
+          </article>
+          <article className="content-card">
+            <h3>{t('top_photos_title')}</h3>
+            <div className="analytics-photo-list">
+              {analytics.top_photos?.length ? analytics.top_photos.map((item) => (
+                <div key={item.id} className="analytics-photo-row">
+                  {item.thumbnail_url ? <img src={item.thumbnail_url} alt={item.alt_text || item.event_title} loading="lazy" decoding="async" /> : null}
+                  <div>
+                    <strong>{item.alt_text || item.event_title}</strong>
+                    <span>{item.event_title}</span>
+                    <div className="analytics-row__stats">
+                      <span>{t('views_short', { count: item.views_count })}</span>
+                      <span>{t('downloads_short', { count: item.downloads_count })}</span>
+                    </div>
+                  </div>
+                </div>
+              )) : <p>{t('no_analytics_data')}</p>}
+            </div>
+          </article>
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -1653,7 +1828,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
             <strong>{effectiveCoverPhotoId ? t('defined') : t('to_choose')}</strong>
           </article>
         </div>
-        {photos.length ? (
+      {photos.length ? (
           <div className="photo-grid photo-grid--admin">
             {photos.map((photo) => (
               <div
@@ -1661,6 +1836,10 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
                 className={`photo-tile photo-tile--admin ${String(effectiveCoverPhotoId) === String(photo.id) ? 'photo-tile--active' : ''}`}
               >
                 <img src={photo.thumbnail_url} alt={photo.alt_text || `Photo ${photo.id}`} loading="lazy" decoding="async" />
+                <div className="photo-tile__meta photo-tile__meta--admin">
+                  <span>{t('views_short', { count: photo.views_count || 0 })}</span>
+                  <span>{t('downloads_short', { count: photo.downloads_count || 0 })}</span>
+                </div>
                 <div className="photo-tile__toolbar">
                   <button type="button" className="photo-pill" onClick={() => handleSelectCover(photo.id)}>
                     {String(effectiveCoverPhotoId) === String(photo.id) ? t('cover_current') : t('set_cover')}
@@ -1738,6 +1917,7 @@ export default function App() {
     <>
       {showLanguageModal ? <LanguageModal onSelect={handleLanguageSelect} t={t} /> : null}
       <Layout admin={admin} t={t} language={language} setLanguage={handleLanguageSelect}>
+        <SiteVisitTracker />
         <Routes>
           <Route path="/" element={<HomePage t={t} language={language} />} />
           <Route path="/archives" element={<ArchivesPage t={t} />} />

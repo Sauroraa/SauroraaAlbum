@@ -172,10 +172,18 @@ class AdminPhotoController
         $row = $event->fetch() ?: [];
 
         $photos = $this->db->prepare(
-            'SELECT id, filename, alt_text, position, is_visible, filepath, thumbnail_path
-             FROM photos
-             WHERE event_id = :event_id
-             ORDER BY position ASC, id ASC'
+            'SELECT p.id,
+                    p.filename,
+                    p.alt_text,
+                    p.position,
+                    p.is_visible,
+                    p.filepath,
+                    p.thumbnail_path,
+                    (SELECT COUNT(*) FROM photo_views pv WHERE pv.photo_id = p.id) AS views_count,
+                    (SELECT COUNT(*) FROM photo_downloads pd WHERE pd.photo_id = p.id) AS downloads_count
+             FROM photos p
+             WHERE p.event_id = :event_id
+             ORDER BY p.position ASC, p.id ASC'
         );
         $photos->execute(['event_id' => $eventId]);
 
@@ -192,6 +200,8 @@ class AdminPhotoController
                     'is_visible' => (bool) $photo['is_visible'],
                     'url' => assetUrl('uploads/' . $photo['filepath']),
                     'thumbnail_url' => assetUrl('uploads/' . $photo['thumbnail_path']),
+                    'views_count' => (int) ($photo['views_count'] ?? 0),
+                    'downloads_count' => (int) ($photo['downloads_count'] ?? 0),
                 ];
             }, $photos->fetchAll()),
         ];
