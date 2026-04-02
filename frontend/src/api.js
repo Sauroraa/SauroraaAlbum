@@ -61,6 +61,7 @@ export async function uploadPhotos(eventId, files, options = {}) {
   const fileList = Array.from(files)
   const created = []
   const errors = []
+  let meta = null
 
   for (let index = 0; index < fileList.length; index += 1) {
     const file = fileList[index]
@@ -84,10 +85,12 @@ export async function uploadPhotos(eventId, files, options = {}) {
       })
 
       created.push(...(data.data || []))
+      meta = data.meta || meta
       options.onFileComplete?.({
         index,
         file,
         created: data.data || [],
+        meta: data.meta || null,
       })
     } catch (error) {
       errors.push({ index, file, error })
@@ -107,7 +110,7 @@ export async function uploadPhotos(eventId, files, options = {}) {
     throw errors[0].error
   }
 
-  return created
+  return { created, meta }
 }
 
 export async function deletePhoto(id) {

@@ -1278,10 +1278,12 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     setIsUploadingCover(true)
     setCoverUploadProgress(0)
     try {
-      const created = await uploadPhotos(id, [file], {
+      const uploadResult = await uploadPhotos(id, [file], {
         setAsCover: true,
         onFileProgress: ({ percent }) => setCoverUploadProgress(percent),
       })
+      const created = uploadResult.created || []
+      const uploadMeta = uploadResult.meta || null
       const coverId = created?.[0]?.id
       if (coverId) {
         const createdCover = {
@@ -1293,10 +1295,12 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
         }
         setForm((prev) => ({ ...prev, cover_photo_id: coverId }))
         setMediaState((prev) => ({
-          photos: [createdCover, ...prev.photos.filter((photo) => String(photo.id) !== String(coverId))],
-          coverPhotoId: coverId,
-          coverImageUrl: createdCover.url,
-          coverThumbnailUrl: createdCover.thumbnail_url,
+          photos: uploadMeta?.photos?.length
+            ? uploadMeta.photos
+            : [createdCover, ...prev.photos.filter((photo) => String(photo.id) !== String(coverId))],
+          coverPhotoId: uploadMeta?.cover_photo_id || coverId,
+          coverImageUrl: uploadMeta?.cover_image_url || createdCover.url,
+          coverThumbnailUrl: uploadMeta?.cover_thumbnail_url || createdCover.thumbnail_url,
         }))
         setEvents((currentEvents) =>
           currentEvents.map((item) => {
@@ -1355,7 +1359,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     setError('')
     setIsUploadingPhotos(true)
     try {
-      const createdPhotos = await uploadPhotos(id, queueItems.map((item) => item.file), {
+      const uploadResult = await uploadPhotos(id, queueItems.map((item) => item.file), {
         onFileProgress: ({ index, percent }) => {
           const currentItem = queueItems[index]
           setPendingPhotoFiles((current) =>
@@ -1364,7 +1368,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
             ),
           )
         },
-        onFileComplete: async ({ index, created }) => {
+        onFileComplete: async ({ index, created, meta }) => {
           const currentItem = queueItems[index]
           const createdPhoto = created?.[0]
           setPendingPhotoFiles((current) =>
@@ -1375,7 +1379,12 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
           if (createdPhoto) {
             setMediaState((prev) => ({
               ...prev,
-              photos: [...prev.photos.filter((photo) => String(photo.id) !== String(createdPhoto.id)), createdPhoto],
+              photos: meta?.photos?.length
+                ? meta.photos
+                : [...prev.photos.filter((photo) => String(photo.id) !== String(createdPhoto.id)), createdPhoto],
+              coverPhotoId: meta?.cover_photo_id || prev.coverPhotoId,
+              coverImageUrl: meta?.cover_image_url || prev.coverImageUrl,
+              coverThumbnailUrl: meta?.cover_thumbnail_url || prev.coverThumbnailUrl,
             }))
           }
         },
@@ -1388,7 +1397,9 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
           )
         },
       })
-      const nextCoverId = form.cover_photo_id || mediaState.coverPhotoId || createdPhotos?.[0]?.id || null
+      const createdPhotos = uploadResult.created || []
+      const uploadMeta = uploadResult.meta || null
+      const nextCoverId = uploadMeta?.cover_photo_id || form.cover_photo_id || mediaState.coverPhotoId || createdPhotos?.[0]?.id || null
       if (nextCoverId && !form.cover_photo_id && !mediaState.coverPhotoId) {
         setForm((prev) => ({ ...prev, cover_photo_id: nextCoverId }))
         setMediaState((prev) => {
