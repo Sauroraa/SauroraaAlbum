@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import {
+  deletePhoto,
   deleteEvent,
   fetchAdminEvents,
   fetchAdminMe,
@@ -1015,9 +1016,9 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated, t, language }) {
 
   const filteredEvents = events.filter((event) => {
     const matchesSearch =
-      event.title.toLowerCase().includes(search.toLowerCase()) ||
-      event.location.toLowerCase().includes(search.toLowerCase()) ||
-      event.slug.toLowerCase().includes(search.toLowerCase())
+      (event.title || '').toLowerCase().includes(search.toLowerCase()) ||
+      (event.location || '').toLowerCase().includes(search.toLowerCase()) ||
+      (event.slug || '').toLowerCase().includes(search.toLowerCase())
 
     if (filter === 'published') return matchesSearch && event.is_published
     if (filter === 'draft') return matchesSearch && !event.is_published
@@ -1144,6 +1145,10 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   const [events, setEvents] = useState([])
   const [form, setForm] = useState(emptyEvent)
   const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [isUploadingCover, setIsUploadingCover] = useState(false)
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
 
   usePageMeta({
     title: `${id ? t('edit_event_title') : t('create_event_title')} | Sauroraa Albums`,
@@ -1160,48 +1165,140 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
 
   useEffect(() => {
     if (!admin) return
-    fetchAdminEvents()
-      .then((items) => {
-        setEvents(items)
-        const current = items.find((item) => String(item.id) === String(id))
-        if (current) {
-          setForm({
-            ...current,
-            cover_photo_id: current.cover_photo_id || '',
-            is_published: Boolean(current.is_published),
-          })
-        }
-      })
-      .catch(() => {})
+    refreshEvents()
   }, [admin, id])
 
   if (!admin) {
     return <AdminLoginPage onAuthenticated={onAuthenticated} t={t} />
   }
 
+  async function refreshEvents(nextCoverId = null) {
+    const items = await fetchAdminEvents()
+    setEvents(items)
+    const current = items.find((item) => String(item.id) === String(id))
+    if (current) {
+      setForm({
+        ...current,
+        cover_photo_id: nextCoverId ?? current.cover_photo_id ?? '',
+        is_published: Boolean(current.is_published),
+      })
+    }
+    return current
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
+    setError('')
+    setStatus('')
+
+    if (!form.title?.trim() || !form.event_date || !form.location?.trim()) {
+      setError(t('event_required_error'))
+      return
+    }
+
     const payload = {
       ...form,
       cover_photo_id: form.cover_photo_id || null,
     }
-    const result = await saveEvent(payload, id)
-    const nextId = id || result?.id
-    setStatus(t('saved'))
-    if (!id && nextId) navigate(`/admin/events/${nextId}`)
+    setIsSaving(true)
+    try {
+      const result = await saveEvent(payload, id)
+      const nextId = id || result?.id
+      setStatus(t('saved'))
+      if (!id && nextId) {
+        navigate(`/admin/events/${nextId}`)
+        return
+      }
+      await refreshEvents()
+    } catch (err) {
+      setError(err.response?.data?.message || t('save_error'))
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  async function handleUpload(event) {
+  async function handleCoverUpload(event) {
+    const file = event.target.files?.[0]
+    if (!file || !id) return
+    setError('')
+    setStatus('')
+    setIsUploadingCover(true)
+    try {
+      const created = await uploadPhotos(id, [file])
+      const coverId = created?.[0]?.id
+      if (coverId) {
+        const payload = {
+          ...form,
+          cover_photo_id: coverId,
+        }
+        await saveEvent(payload, id)
+        setForm((prev) => ({ ...prev, cover_photo_id: coverId }))
+        await refreshEvents(coverId)
+      } else {
+        await refreshEvents()
+      }
+      setStatus(t('cover_uploaded'))
+    } catch (err) {
+      setError(err.response?.data?.message || t('upload_error'))
+    } finally {
+      event.target.value = ''
+      setIsUploadingCover(false)
+    }
+  }
+
+  async function handleUploadPhotos(event) {
     const files = event.target.files
     if (!files?.length || !id) return
-    await uploadPhotos(id, files)
-    setStatus(t('photos_sent'))
-    const items = await fetchAdminEvents()
-    setEvents(items)
+    setError('')
+    setStatus('')
+    setIsUploadingPhotos(true)
+    try {
+      await uploadPhotos(id, files)
+      setStatus(t('photos_sent'))
+      await refreshEvents()
+    } catch (err) {
+      setError(err.response?.data?.message || t('upload_error'))
+    } finally {
+      event.target.value = ''
+      setIsUploadingPhotos(false)
+    }
+  }
+
+  async function handlePhotoDelete(photoId) {
+    setError('')
+    setStatus('')
+    try {
+      await deletePhoto(photoId)
+      if (String(form.cover_photo_id) === String(photoId)) {
+        setForm((prev) => ({ ...prev, cover_photo_id: '' }))
+      }
+      await refreshEvents()
+      setStatus(t('photo_deleted'))
+    } catch (err) {
+      setError(err.response?.data?.message || t('delete_photo_error'))
+    }
+  }
+
+  async function handleSelectCover(photoId) {
+    setError('')
+    setStatus('')
+    try {
+      const payload = {
+        ...form,
+        cover_photo_id: photoId,
+      }
+      await saveEvent(payload, id)
+      setForm((prev) => ({ ...prev, cover_photo_id: photoId }))
+      setStatus(t('cover_selected'))
+      await refreshEvents(photoId)
+    } catch (err) {
+      setError(err.response?.data?.message || t('save_error'))
+    }
   }
 
   const current = events.find((item) => String(item.id) === String(id))
   const photos = current?.photos || []
+  const coverPhoto = photos.find((photo) => String(photo.id) === String(form.cover_photo_id))
 
   return (
     <section className="section">
@@ -1214,7 +1311,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
         <div className="form-grid">
           <label>
             {t('title')}
-            <input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
+            <input required value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
           </label>
           <label>
             {t('slug')}
@@ -1224,13 +1321,14 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
             {t('date')}
             <input
               type="date"
+              required
               value={form.event_date}
               onChange={(e) => setForm((prev) => ({ ...prev, event_date: e.target.value }))}
             />
           </label>
           <label>
             {t('location')}
-            <input value={form.location} onChange={(e) => setForm((prev) => ({ ...prev, location: e.target.value }))} />
+            <input required value={form.location} onChange={(e) => setForm((prev) => ({ ...prev, location: e.target.value }))} />
           </label>
         </div>
         <label>
@@ -1250,10 +1348,38 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
           {t('publish_event')}
         </label>
         {id ? (
-          <label className="upload-field">
-            {t('upload_photos')}
-            <input type="file" accept=".jpg,.jpeg,.png,.webp" multiple onChange={handleUpload} />
-          </label>
+          <div className="admin-upload-grid">
+            <div className="upload-card">
+              <div className="upload-card__header">
+                <strong>{t('cover_upload_title')}</strong>
+                <span>{t('cover_upload_text')}</span>
+              </div>
+              {coverPhoto ? (
+                <div className="cover-preview">
+                  <img src={coverPhoto.thumbnail_url} alt={t('cover')} />
+                </div>
+              ) : (
+                <div className="cover-preview cover-preview--empty">
+                  <span>{t('no_cover')}</span>
+                </div>
+              )}
+              <label className="upload-field upload-field--panel">
+                <span>{isUploadingCover ? t('uploading') : t('upload_cover')}</span>
+                <input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={handleCoverUpload} disabled={isUploadingCover} />
+              </label>
+            </div>
+
+            <div className="upload-card">
+              <div className="upload-card__header">
+                <strong>{t('gallery_upload_title')}</strong>
+                <span>{t('gallery_upload_text')}</span>
+              </div>
+              <label className="upload-field upload-field--panel">
+                <span>{isUploadingPhotos ? t('uploading') : t('upload_photos')}</span>
+                <input type="file" accept=".jpg,.jpeg,.png,.webp" multiple onChange={handleUploadPhotos} disabled={isUploadingPhotos} />
+              </label>
+            </div>
+          </div>
         ) : <p className="form-hint">{t('save_first_hint')}</p>}
         <div className="admin-stats admin-stats--compact">
           <article className="stat-card">
@@ -1272,20 +1398,28 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
         {photos.length ? (
           <div className="photo-grid photo-grid--admin">
             {photos.map((photo) => (
-              <button
+              <div
                 key={photo.id}
-                type="button"
-                className={`photo-tile ${String(form.cover_photo_id) === String(photo.id) ? 'photo-tile--active' : ''}`}
-                onClick={() => setForm((prev) => ({ ...prev, cover_photo_id: photo.id }))}
-                style={{ backgroundImage: `url(${photo.thumbnail_url})` }}
-              />
+                className={`photo-tile photo-tile--admin ${String(form.cover_photo_id) === String(photo.id) ? 'photo-tile--active' : ''}`}
+              >
+                <img src={photo.thumbnail_url} alt={photo.alt_text || `Photo ${photo.id}`} loading="lazy" decoding="async" />
+                <div className="photo-tile__toolbar">
+                  <button type="button" className="photo-pill" onClick={() => handleSelectCover(photo.id)}>
+                    {String(form.cover_photo_id) === String(photo.id) ? t('cover_current') : t('set_cover')}
+                  </button>
+                  <button type="button" className="photo-pill photo-pill--danger" onClick={() => handlePhotoDelete(photo.id)}>
+                    {t('delete')}
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         ) : null}
+        {error ? <p className="form-error">{error}</p> : null}
         {status ? <p className="form-success">{status}</p> : null}
         <div className="hero__actions">
-          <button className="button" type="submit">
-            {t('save')}
+          <button className="button" type="submit" disabled={isSaving}>
+            {isSaving ? t('saving') : t('save')}
           </button>
           <button className="button button--ghost" type="button" onClick={() => navigate('/admin')}>
             {t('back')}

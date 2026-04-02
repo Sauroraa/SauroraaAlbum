@@ -822,6 +822,36 @@ img {
   outline: 2px solid rgba(36, 241, 224, 0.8);
 }
 
+.photo-tile--admin {
+  min-height: 210px;
+}
+
+.photo-tile__toolbar {
+  position: absolute;
+  inset: auto 10px 10px 10px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.photo-pill {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(10, 12, 18, 0.82);
+  color: var(--acid-white);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.photo-pill--danger {
+  background: rgba(92, 20, 34, 0.82);
+}
+
 .lightbox {
   position: fixed;
   inset: 0;
@@ -950,6 +980,75 @@ img {
   background: transparent;
 }
 
+.admin-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.upload-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.upload-card__header {
+  display: grid;
+  gap: 6px;
+}
+
+.upload-card__header strong {
+  font-family: "Manrope", sans-serif;
+}
+
+.upload-card__header span {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.upload-field--panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.upload-field--panel span {
+  color: var(--acid-white);
+}
+
+.cover-preview {
+  position: relative;
+  min-height: 220px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(135deg, #181929, #07080b);
+}
+
+.cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-preview--empty {
+  display: grid;
+  place-items: center;
+}
+
+.cover-preview--empty span {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1045,6 +1144,10 @@ img {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-upload-grid {
     grid-template-columns: 1fr;
   }
 

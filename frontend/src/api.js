@@ -65,3 +65,6 @@ export async function uploadPhotos(eventId, files) {
   return data.data
 }
 
+export async function deletePhoto(id) {
+  await api.delete(`/admin/photos/${id}`)
+}

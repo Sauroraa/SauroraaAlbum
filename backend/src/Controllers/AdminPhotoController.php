@@ -45,7 +45,12 @@ class AdminPhotoController
                 'size' => $files['size'][$i],
             ];
 
-            $stored = ImageService::storeEventImage($file, (int) $row['year'], $row['slug']);
+            try {
+                $stored = ImageService::storeEventImage($file, (int) $row['year'], $row['slug']);
+            } catch (\RuntimeException $exception) {
+                jsonResponse(['message' => $exception->getMessage()], 422);
+            }
+
             $position = (int) $this->db->query('SELECT COALESCE(MAX(position), 0) + 1 FROM photos WHERE event_id = ' . $eventId)->fetchColumn();
 
             $stmt = $this->db->prepare(
@@ -107,4 +112,3 @@ class AdminPhotoController
         jsonResponse(['message' => 'Ordre mis à jour.']);
     }
 }
-
