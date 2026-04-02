@@ -1,0 +1,7 @@
+{
+  "name": "sauroraa/album-backend",
+  "description": "API REST PHP pour les archives photo Sauroraa",
+  "type": "project",
+  "require": {}
+}
+
