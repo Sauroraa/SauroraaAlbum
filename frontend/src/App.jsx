@@ -1170,6 +1170,12 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   const [pendingCoverPreview, setPendingCoverPreview] = useState('')
   const [pendingPhotoFiles, setPendingPhotoFiles] = useState([])
   const [coverUploadProgress, setCoverUploadProgress] = useState(0)
+  const [mediaState, setMediaState] = useState({
+    photos: [],
+    coverPhotoId: '',
+    coverImageUrl: '',
+    coverThumbnailUrl: '',
+  })
 
   usePageMeta({
     title: `${id ? t('edit_event_title') : t('create_event_title')} | Sauroraa Albums`,
@@ -1218,9 +1224,15 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     setEvents(items)
     const current = items.find((item) => String(item.id) === String(id))
     if (current) {
+      setMediaState((prev) => ({
+        photos: Array.isArray(current.photos) && current.photos.length ? current.photos : prev.photos,
+        coverPhotoId: nextCoverId ?? current.cover_photo_id ?? prev.coverPhotoId ?? '',
+        coverImageUrl: current.cover_image_url || prev.coverImageUrl || '',
+        coverThumbnailUrl: current.cover_thumbnail_url || prev.coverThumbnailUrl || '',
+      }))
       setForm({
         ...current,
-        cover_photo_id: nextCoverId ?? current.cover_photo_id ?? '',
+        cover_photo_id: nextCoverId ?? current.cover_photo_id ?? mediaState.coverPhotoId ?? '',
         is_published: Boolean(current.is_published),
       })
     }
@@ -1239,7 +1251,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
 
     const payload = {
       ...form,
-      cover_photo_id: form.cover_photo_id || null,
+      cover_photo_id: form.cover_photo_id || mediaState.coverPhotoId || null,
     }
     setIsSaving(true)
     try {
@@ -1280,6 +1292,12 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
           position: 0,
         }
         setForm((prev) => ({ ...prev, cover_photo_id: coverId }))
+        setMediaState((prev) => ({
+          photos: [createdCover, ...prev.photos.filter((photo) => String(photo.id) !== String(coverId))],
+          coverPhotoId: coverId,
+          coverImageUrl: createdCover.url,
+          coverThumbnailUrl: createdCover.thumbnail_url,
+        }))
         setEvents((currentEvents) =>
           currentEvents.map((item) => {
             if (String(item.id) !== String(id)) return item
@@ -1339,11 +1357,26 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
             ),
           )
         },
-        onFileComplete: async ({ index }) => {
+        onFileComplete: async ({ index, created }) => {
           const currentItem = queueItems[index]
+          const createdPhoto = created?.[0]
           setPendingPhotoFiles((current) =>
             current.map((item) =>
               item.id === currentItem.id ? { ...item, progress: 100, status: 'done' } : item,
+            ),
+          )
+          if (createdPhoto) {
+            setMediaState((prev) => ({
+              ...prev,
+              photos: [...prev.photos.filter((photo) => String(photo.id) !== String(createdPhoto.id)), createdPhoto],
+            }))
+          }
+        },
+        onFileError: ({ index }) => {
+          const currentItem = queueItems[index]
+          setPendingPhotoFiles((current) =>
+            current.map((item) =>
+              item.id === currentItem.id ? { ...item, status: 'error' } : item,
             ),
           )
         },
@@ -1385,6 +1418,12 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
       if (String(form.cover_photo_id) === String(photoId)) {
         setForm((prev) => ({ ...prev, cover_photo_id: '' }))
       }
+      setMediaState((prev) => ({
+        photos: prev.photos.filter((photo) => String(photo.id) !== String(photoId)),
+        coverPhotoId: String(prev.coverPhotoId) === String(photoId) ? '' : prev.coverPhotoId,
+        coverImageUrl: String(prev.coverPhotoId) === String(photoId) ? '' : prev.coverImageUrl,
+        coverThumbnailUrl: String(prev.coverPhotoId) === String(photoId) ? '' : prev.coverThumbnailUrl,
+      }))
       await refreshEvents()
       setStatus(t('photo_deleted'))
     } catch (err) {
@@ -1402,6 +1441,15 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
       }
       await saveEvent(payload, id)
       setForm((prev) => ({ ...prev, cover_photo_id: photoId }))
+      setMediaState((prev) => {
+        const selectedPhoto = prev.photos.find((photo) => String(photo.id) === String(photoId))
+        return {
+          ...prev,
+          coverPhotoId: photoId,
+          coverImageUrl: selectedPhoto?.url || prev.coverImageUrl,
+          coverThumbnailUrl: selectedPhoto?.thumbnail_url || prev.coverThumbnailUrl,
+        }
+      })
       setStatus(t('cover_selected'))
       await refreshEvents(photoId)
     } catch (err) {
@@ -1410,8 +1458,9 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
   }
 
   const current = events.find((item) => String(item.id) === String(id))
-  const photos = current?.photos || []
-  const coverPhoto = photos.find((photo) => String(photo.id) === String(form.cover_photo_id))
+  const effectiveCoverPhotoId = form.cover_photo_id || mediaState.coverPhotoId || ''
+  const photos = mediaState.photos.length ? mediaState.photos : current?.photos || []
+  const coverPhoto = photos.find((photo) => String(photo.id) === String(effectiveCoverPhotoId))
   const uploadDoneCount = pendingPhotoFiles.filter((file) => file.status === 'done').length
   const uploadActiveCount = pendingPhotoFiles.filter((file) => file.status === 'uploading').length
   const uploadErrorCount = pendingPhotoFiles.filter((file) => file.status === 'error').length
@@ -1561,7 +1610,7 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
           </article>
           <article className="stat-card">
             <span>{t('cover')}</span>
-            <strong>{form.cover_photo_id ? t('defined') : t('to_choose')}</strong>
+            <strong>{effectiveCoverPhotoId ? t('defined') : t('to_choose')}</strong>
           </article>
         </div>
         {photos.length ? (
@@ -1569,12 +1618,12 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
             {photos.map((photo) => (
               <div
                 key={photo.id}
-                className={`photo-tile photo-tile--admin ${String(form.cover_photo_id) === String(photo.id) ? 'photo-tile--active' : ''}`}
+                className={`photo-tile photo-tile--admin ${String(effectiveCoverPhotoId) === String(photo.id) ? 'photo-tile--active' : ''}`}
               >
                 <img src={photo.thumbnail_url} alt={photo.alt_text || `Photo ${photo.id}`} loading="lazy" decoding="async" />
                 <div className="photo-tile__toolbar">
                   <button type="button" className="photo-pill" onClick={() => handleSelectCover(photo.id)}>
-                    {String(form.cover_photo_id) === String(photo.id) ? t('cover_current') : t('set_cover')}
+                    {String(effectiveCoverPhotoId) === String(photo.id) ? t('cover_current') : t('set_cover')}
                   </button>
                   <button type="button" className="photo-pill photo-pill--danger" onClick={() => handlePhotoDelete(photo.id)}>
                     {t('delete')}

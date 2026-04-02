@@ -28,24 +28,14 @@ class AdminPhotoController
             jsonResponse(['message' => 'Soirée introuvable.'], 404);
         }
 
-        $files = $_FILES['photos'] ?? null;
+        $files = $this->normalizeFiles($_FILES['photos'] ?? $_FILES['photo'] ?? null);
 
         if (!$files) {
             jsonResponse(['message' => 'Aucun fichier reçu.'], 422);
         }
 
         $created = [];
-        $count = is_array($files['name']) ? count($files['name']) : 0;
-
-        for ($i = 0; $i < $count; $i++) {
-            $file = [
-                'name' => $files['name'][$i],
-                'type' => $files['type'][$i],
-                'tmp_name' => $files['tmp_name'][$i],
-                'error' => $files['error'][$i],
-                'size' => $files['size'][$i],
-            ];
-
+        foreach ($files as $file) {
             try {
                 $stored = ImageService::storeEventImage($file, (int) $row['year'], $row['slug']);
             } catch (\RuntimeException $exception) {
@@ -70,6 +60,10 @@ class AdminPhotoController
             $photoId = (int) $this->db->lastInsertId();
             $created[] = [
                 'id' => $photoId,
+                'filename' => $stored['filename'],
+                'alt_text' => pathinfo($stored['filename'], PATHINFO_FILENAME),
+                'is_visible' => true,
+                'position' => $position,
                 'url' => assetUrl('uploads/' . $stored['filepath']),
                 'thumbnail_url' => assetUrl('uploads/' . $stored['thumbnail_path']),
             ];
@@ -83,6 +77,37 @@ class AdminPhotoController
         }
 
         jsonResponse(['data' => $created], 201);
+    }
+
+    private function normalizeFiles(mixed $files): array
+    {
+        if (!is_array($files) || !isset($files['name'], $files['tmp_name'], $files['error'], $files['size'])) {
+            return [];
+        }
+
+        if (!is_array($files['name'])) {
+            return [[
+                'name' => $files['name'],
+                'type' => $files['type'] ?? '',
+                'tmp_name' => $files['tmp_name'],
+                'error' => $files['error'],
+                'size' => $files['size'],
+            ]];
+        }
+
+        $normalized = [];
+        $count = count($files['name']);
+        for ($i = 0; $i < $count; $i++) {
+            $normalized[] = [
+                'name' => $files['name'][$i],
+                'type' => $files['type'][$i] ?? '',
+                'tmp_name' => $files['tmp_name'][$i],
+                'error' => $files['error'][$i],
+                'size' => $files['size'][$i],
+            ];
+        }
+
+        return $normalized;
     }
 
     public function delete(int $id): void

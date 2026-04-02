@@ -60,6 +60,7 @@ export async function deleteEvent(id) {
 export async function uploadPhotos(eventId, files, options = {}) {
   const fileList = Array.from(files)
   const created = []
+  const errors = []
 
   for (let index = 0; index < fileList.length; index += 1) {
     const file = fileList[index]
@@ -69,25 +70,41 @@ export async function uploadPhotos(eventId, files, options = {}) {
     if (options.setAsCover) {
       body.append('set_as_cover', '1')
     }
+    try {
+      const { data } = await api.post('/admin/photos/upload', body, {
+        onUploadProgress: (progressEvent) => {
+          if (!progressEvent.total) return
+          const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100)
+          options.onFileProgress?.({
+            index,
+            file,
+            percent,
+          })
+        },
+      })
 
-    const { data } = await api.post('/admin/photos/upload', body, {
-      onUploadProgress: (progressEvent) => {
-        if (!progressEvent.total) return
-        const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100)
-        options.onFileProgress?.({
-          index,
-          file,
-          percent,
-        })
-      },
-    })
+      created.push(...(data.data || []))
+      options.onFileComplete?.({
+        index,
+        file,
+        created: data.data || [],
+      })
+    } catch (error) {
+      errors.push({ index, file, error })
+      options.onFileError?.({
+        index,
+        file,
+        error,
+      })
 
-    created.push(...(data.data || []))
-    options.onFileComplete?.({
-      index,
-      file,
-      created: data.data || [],
-    })
+      if (options.setAsCover || fileList.length === 1) {
+        throw error
+      }
+    }
+  }
+
+  if (!created.length && errors.length) {
+    throw errors[0].error
   }
 
   return created
