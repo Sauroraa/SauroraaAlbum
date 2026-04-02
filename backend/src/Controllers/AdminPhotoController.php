@@ -14,6 +14,7 @@ class AdminPhotoController
     public function upload(): void
     {
         $eventId = (int) ($_POST['event_id'] ?? 0);
+        $setAsCover = filter_var($_POST['set_as_cover'] ?? false, FILTER_VALIDATE_BOOL);
 
         if (!$eventId) {
             jsonResponse(['message' => 'Event requis.'], 422);
@@ -76,7 +77,7 @@ class AdminPhotoController
 
         $cover = $this->db->prepare('SELECT cover_photo_id FROM events WHERE id = :id');
         $cover->execute(['id' => $eventId]);
-        if (!$cover->fetchColumn() && isset($created[0]['id'])) {
+        if (($setAsCover || !$cover->fetchColumn()) && isset($created[0]['id'])) {
             $setCover = $this->db->prepare('UPDATE events SET cover_photo_id = :cover WHERE id = :id');
             $setCover->execute(['cover' => $created[0]['id'], 'id' => $eventId]);
         }

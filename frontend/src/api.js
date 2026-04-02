@@ -66,6 +66,9 @@ export async function uploadPhotos(eventId, files, options = {}) {
     const body = new FormData()
     body.append('event_id', eventId)
     body.append('photos[]', file)
+    if (options.setAsCover) {
+      body.append('set_as_cover', '1')
+    }
 
     const { data } = await api.post('/admin/photos/upload', body, {
       onUploadProgress: (progressEvent) => {

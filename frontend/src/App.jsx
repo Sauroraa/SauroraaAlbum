@@ -1267,15 +1267,11 @@ function AdminEventEditPage({ admin, onAuthenticated, t }) {
     setCoverUploadProgress(0)
     try {
       const created = await uploadPhotos(id, [file], {
+        setAsCover: true,
         onFileProgress: ({ percent }) => setCoverUploadProgress(percent),
       })
       const coverId = created?.[0]?.id
       if (coverId) {
-        const payload = {
-          ...form,
-          cover_photo_id: coverId,
-        }
-        await saveEvent(payload, id)
         setForm((prev) => ({ ...prev, cover_photo_id: coverId }))
         await refreshEvents(coverId)
       } else {
