@@ -58,11 +58,19 @@ export async function deleteEvent(id) {
 }
 
 export async function uploadPhotos(eventId, files) {
-  const body = new FormData()
-  body.append('event_id', eventId)
-  Array.from(files).forEach((file) => body.append('photos[]', file))
-  const { data } = await api.post('/admin/photos/upload', body)
-  return data.data
+  const fileList = Array.from(files)
+  const chunkSize = 8
+  const created = []
+
+  for (let index = 0; index < fileList.length; index += chunkSize) {
+    const body = new FormData()
+    body.append('event_id', eventId)
+    fileList.slice(index, index + chunkSize).forEach((file) => body.append('photos[]', file))
+    const { data } = await api.post('/admin/photos/upload', body)
+    created.push(...(data.data || []))
+  }
+
+  return created
 }
 
 export async function deletePhoto(id) {
