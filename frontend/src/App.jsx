@@ -14,6 +14,20 @@ import {
   uploadPhotos,
 } from './api'
 
+const aboutHighlights = [
+  'Collectif d’evenements electroniques underground en Belgique',
+  'Structure professionnelle nee en 2025',
+  'Vision independante, moderne et creative de l’evenementiel',
+  'Production d’experiences immersives son, lumiere et image',
+]
+
+const aboutTeam = [
+  { name: 'Loris', role: 'President & Directeur Technique' },
+  { name: 'Julien', role: 'Vice-President & Directeur Artistique' },
+  { name: 'Alec', role: 'Tresorier & Directeur Logistique' },
+  { name: 'Alexandre', role: 'Gestion Artistes' },
+]
+
 const navigation = [
   { to: '/', label: 'Accueil' },
   { to: '/archives', label: 'Archives' },
@@ -29,6 +43,13 @@ const emptyEvent = {
   description: '',
   cover_photo_id: '',
   is_published: false,
+}
+
+function formatEventDate(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('fr-BE')
 }
 
 function Layout({ children, admin }) {
@@ -62,7 +83,7 @@ function Layout({ children, admin }) {
       </header>
       <main>{children}</main>
       <footer className="footer">
-        <p>Archives photo premium des soirées Sauroraa.</p>
+        <p>Archives photo des soirées Sauroraa.</p>
         <p>album.sauroraa.be</p>
       </footer>
     </div>
@@ -92,7 +113,7 @@ function EventCard({ event }) {
         }}
       />
       <div className="event-card__body">
-        <p>{new Date(event.event_date).toLocaleDateString('fr-BE')}</p>
+        <p>{formatEventDate(event.event_date)}</p>
         <h3>{event.title}</h3>
         <p>{event.location}</p>
         <Link className="button button--ghost" to={`/soiree/${event.slug}`}>
@@ -171,10 +192,12 @@ function PhotoLightbox({ photos, index, onClose, onMove }) {
 function HomePage() {
   const [years, setYears] = useState([])
   const [events, setEvents] = useState([])
+  const featuredEvent = events[0] || null
+  const secondaryEvents = events.slice(1, 4)
 
   useEffect(() => {
     fetchYears().then(setYears)
-    fetchEvents().then((items) => setEvents(items.slice(0, 3)))
+    fetchEvents().then((items) => setEvents(items.slice(0, 4)))
   }, [])
 
   return (
@@ -182,10 +205,10 @@ function HomePage() {
       <section className="hero">
         <div className="hero__copy">
           <span>Revivez les nuits Sauroraa</span>
-          <h1>Une galerie immersive pour les soirées qui marquent.</h1>
+          <h1>Les archives qui prolongent l’univers Sauroraa.</h1>
           <p>
-            Explorez les archives photo, année après année, avec une navigation fluide pensée
-            pour mettre les visuels au premier plan.
+            Une plateforme photo pensée pour parcourir les soirées passées avec une vraie
+            presence visuelle, une navigation simple, et une mise en avant claire des albums.
           </p>
           <div className="hero__actions">
             <Link to="/archives" className="button">
@@ -195,34 +218,83 @@ function HomePage() {
               Découvrir l’univers
             </Link>
           </div>
+          <div className="hero__metrics">
+            <div>
+              <strong>{years.length}</strong>
+              <span>Annees</span>
+            </div>
+            <div>
+              <strong>{events.length}</strong>
+              <span>Albums recents</span>
+            </div>
+            <div>
+              <strong>2026</strong>
+              <span>Archive active</span>
+            </div>
+          </div>
         </div>
         <div className="hero__panel">
-          <p>Dernières soirées publiées</p>
-          {events.map((event) => (
-            <Link key={event.id} to={`/soiree/${event.slug}`} className="hero__event">
-              <strong>{event.title}</strong>
-              <span>{new Date(event.event_date).toLocaleDateString('fr-BE')}</span>
-            </Link>
-          ))}
+          {featuredEvent ? (
+            <>
+              <div
+                className="hero__featured"
+                style={{
+                  backgroundImage: featuredEvent.cover_image_url
+                    ? `linear-gradient(180deg, rgba(8,10,14,.08), rgba(8,10,14,.9)), url(${featuredEvent.cover_image_url})`
+                    : undefined,
+                }}
+              >
+                <span>Derniere publication</span>
+                <h2>{featuredEvent.title}</h2>
+                <p>{featuredEvent.location}</p>
+                <Link className="button button--ghost" to={`/soiree/${featuredEvent.slug}`}>
+                  Ouvrir l’album
+                </Link>
+              </div>
+              <div className="hero__list">
+                {secondaryEvents.map((event) => (
+                  <Link key={event.id} to={`/soiree/${event.slug}`} className="hero__event">
+                    <div>
+                      <strong>{event.title}</strong>
+                      <small>{event.location}</small>
+                    </div>
+                    <span>{formatEventDate(event.event_date)}</span>
+                  </Link>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="empty-state">
+              <strong>Aucune soiree publiee pour le moment.</strong>
+              <p>Les prochains albums apparaitront ici des qu’ils seront disponibles.</p>
+            </div>
+          )}
         </div>
       </section>
 
       <section className="section">
         <SectionIntro
           eyebrow="Archives"
-          title="Par année, par ambiance, par souvenir"
-          text="Chaque archive rassemble les soirées publiées avec leur couverture, leur date et leur galerie."
+          title="Des archives pensees comme un vrai catalogue visuel"
+          text="Chaque annee rassemble les soirees publiees avec leur couverture, leur date, leur lieu et un acces rapide a l’album."
           action={
             <Link to="/archives" className="button button--ghost">
               Voir toutes les années
             </Link>
           }
         />
-        <div className="year-grid">
-          {years.map((year) => (
-            <YearCard key={year.year} year={year} />
-          ))}
-        </div>
+        {years.length ? (
+          <div className="year-grid">
+            {years.map((year) => (
+              <YearCard key={year.year} year={year} />
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <strong>Aucune archive n’est encore publiee.</strong>
+            <p>Publiez une premiere soiree depuis l’administration pour alimenter la home.</p>
+          </div>
+        )}
       </section>
     </>
   )
@@ -241,11 +313,18 @@ function ArchivesPage() {
         title="Les années disponibles"
         text="Accédez rapidement à chaque saison de soirées Sauroraa."
       />
-      <div className="year-grid">
-        {years.map((year) => (
-          <YearCard key={year.year} year={year} />
-        ))}
-      </div>
+      {years.length ? (
+        <div className="year-grid">
+          {years.map((year) => (
+            <YearCard key={year.year} year={year} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <strong>Aucune annee disponible.</strong>
+          <p>Les archives apparaitront ici automatiquement apres publication.</p>
+        </div>
+      )}
     </section>
   )
 }
@@ -265,11 +344,18 @@ function YearPage() {
         title={`Soirées ${year}`}
         text="Toutes les soirées publiées pour cette année."
       />
-      <div className="event-grid">
-        {events.map((event) => (
-          <EventCard key={event.id} event={event} />
-        ))}
-      </div>
+      {events.length ? (
+        <div className="event-grid">
+          {events.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <strong>Aucune soiree publiee sur cette annee.</strong>
+          <p>La page se remplira automatiquement des qu’une soiree sera publiee.</p>
+        </div>
+      )}
     </section>
   )
 }
@@ -284,7 +370,14 @@ function EventPage() {
   }, [slug])
 
   if (!event) {
-    return <section className="section"><p>Chargement de l’album…</p></section>
+    return (
+      <section className="section">
+        <div className="empty-state">
+          <strong>Chargement de l’album…</strong>
+          <p>Les photos et informations de la soiree arrivent.</p>
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -297,12 +390,19 @@ function EventPage() {
             : undefined,
         }}
       >
-        <span>{new Date(event.event_date).toLocaleDateString('fr-BE')}</span>
+        <span>{formatEventDate(event.event_date)}</span>
         <h1>{event.title}</h1>
         <p>{event.location}</p>
         {event.description ? <div className="album-hero__description">{event.description}</div> : null}
       </div>
-      <PhotoGrid photos={event.photos} onOpen={setActivePhoto} />
+      {event.photos?.length ? (
+        <PhotoGrid photos={event.photos} onOpen={setActivePhoto} />
+      ) : (
+        <div className="empty-state">
+          <strong>Aucune photo n’est encore disponible pour cet album.</strong>
+          <p>Ajoutez des images depuis l’administration pour publier la galerie.</p>
+        </div>
+      )}
       <PhotoLightbox
         photos={event.photos}
         index={activePhoto}
@@ -319,6 +419,117 @@ function StaticPage({ eyebrow, title, text }) {
   return (
     <section className="section section--narrow">
       <SectionIntro eyebrow={eyebrow} title={title} text={text} />
+    </section>
+  )
+}
+
+function AboutPage() {
+  return (
+    <section className="section">
+      <SectionIntro
+        eyebrow="A propos"
+        title="Sauroraa, collectif d’evenements electroniques underground"
+        text="D’apres les informations publiques de sauroraa.be, Sauroraa est une structure professionnelle nee en Belgique en 2025, fondee par trois passionnes de musique electronique, avec une ambition immersive, independante et creative."
+      />
+      <div className="content-grid">
+        <article className="content-card">
+          <h3>Identite</h3>
+          <p>
+            Sauroraa ne se limite pas a l’organisation de soirees. Le collectif conçoit des
+            experiences ou le son, la lumiere et l’image se rencontrent pour construire un
+            univers nocturne fort, coherent et culturellement marque.
+          </p>
+          <div className="tag-list">
+            {aboutHighlights.map((item) => (
+              <span key={item} className="info-tag">
+                {item}
+              </span>
+            ))}
+          </div>
+        </article>
+
+        <article className="content-card">
+          <h3>Mission</h3>
+          <p>
+            La mission de Sauroraa est de produire des evenements immersifs, valoriser des
+            artistes visionnaires et connecter les publics autour d’experiences sensibles et
+            memorables. Le collectif produit aussi du contenu visuel et digital pour des projets
+            a fort impact culturel.
+          </p>
+          <p>
+            Basee en Wallonie, la structure etend son activite a travers toute la Belgique avec
+            une ambition europeenne.
+          </p>
+        </article>
+      </div>
+
+      <section className="inner-section">
+        <SectionIntro
+          eyebrow="Equipe"
+          title="Une equipe soudee entre vision creative et logistique"
+          text="L’equipe publique presentee sur sauroraa.be met en avant une organisation claire entre direction technique, artistique, logistique et gestion artistes."
+        />
+        <div className="team-grid">
+          {aboutTeam.map((member) => (
+            <article key={member.name} className="team-card">
+              <strong>{member.name}</strong>
+              <span>{member.role}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function ContactPage() {
+  return (
+    <section className="section">
+      <SectionIntro
+        eyebrow="Contact"
+        title="Contact, mentions et informations utiles"
+        text="Pour toute question, proposition, booking ou demande de collaboration, l’adresse de contact publique de Sauroraa est disponible ci-dessous."
+      />
+      <div className="content-grid">
+        <article className="content-card">
+          <h3>Contact principal</h3>
+          <p>
+            Vous pouvez contacter l’equipe Sauroraa pour les demandes generales, partenariats,
+            bookings, contenus visuels et informations liees aux evenements.
+          </p>
+          <a className="button" href="mailto:contact@sauroraa.be">
+            contact@sauroraa.be
+          </a>
+          <div className="contact-list">
+            <div>
+              <strong>Email</strong>
+              <span>contact@sauroraa.be</span>
+            </div>
+            <div>
+              <strong>Objet du site</strong>
+              <span>Archives photo officielles des soirees Sauroraa</span>
+            </div>
+            <div>
+              <strong>Zone d’activite</strong>
+              <span>Wallonie et Belgique</span>
+            </div>
+          </div>
+        </article>
+
+        <article className="content-card">
+          <h3>Mentions et droits a l’image</h3>
+          <p>
+            Les contenus photo publies sur cette plateforme sont lies aux evenements Sauroraa.
+            Toute demande relative a l’image, au retrait d’un contenu, a une rectification ou a
+            une utilisation non autorisee peut etre adressee directement a l’equipe via l’email
+            de contact.
+          </p>
+          <p>
+            Une page juridique plus detaillee pourra etre completee ensuite avec les mentions
+            legales, la politique de confidentialite et les conditions de publication des medias.
+          </p>
+        </article>
+      </div>
     </section>
   )
 }
@@ -375,6 +586,8 @@ function AdminLoginPage({ onAuthenticated }) {
 function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
   const navigate = useNavigate()
   const [events, setEvents] = useState([])
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState('all')
 
   useEffect(() => {
     if (!admin) return
@@ -389,6 +602,21 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
     await deleteEvent(id)
     setEvents((current) => current.filter((item) => item.id !== id))
   }
+
+  const filteredEvents = events.filter((event) => {
+    const matchesSearch =
+      event.title.toLowerCase().includes(search.toLowerCase()) ||
+      event.location.toLowerCase().includes(search.toLowerCase()) ||
+      event.slug.toLowerCase().includes(search.toLowerCase())
+
+    if (filter === 'published') return matchesSearch && event.is_published
+    if (filter === 'draft') return matchesSearch && !event.is_published
+    return matchesSearch
+  })
+
+  const totalPhotos = events.reduce((sum, event) => sum + (event.photos?.length || 0), 0)
+  const publishedCount = events.filter((event) => event.is_published).length
+  const draftCount = events.length - publishedCount
 
   return (
     <section className="section">
@@ -415,16 +643,77 @@ function AdminDashboardPage({ admin, onLogout, onAuthenticated }) {
           </button>
         </div>
       </div>
+      <div className="admin-stats">
+        <article className="stat-card">
+          <span>Soirees</span>
+          <strong>{events.length}</strong>
+        </article>
+        <article className="stat-card">
+          <span>Publiees</span>
+          <strong>{publishedCount}</strong>
+        </article>
+        <article className="stat-card">
+          <span>Brouillons</span>
+          <strong>{draftCount}</strong>
+        </article>
+        <article className="stat-card">
+          <span>Photos</span>
+          <strong>{totalPhotos}</strong>
+        </article>
+      </div>
+      <div className="admin-filters">
+        <label>
+          Rechercher
+          <input
+            type="search"
+            placeholder="Titre, lieu ou slug"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <div className="filter-group">
+          <button
+            className={`button button--ghost${filter === 'all' ? ' button--selected' : ''}`}
+            type="button"
+            onClick={() => setFilter('all')}
+          >
+            Tout
+          </button>
+          <button
+            className={`button button--ghost${filter === 'published' ? ' button--selected' : ''}`}
+            type="button"
+            onClick={() => setFilter('published')}
+          >
+            Publiees
+          </button>
+          <button
+            className={`button button--ghost${filter === 'draft' ? ' button--selected' : ''}`}
+            type="button"
+            onClick={() => setFilter('draft')}
+          >
+            Brouillons
+          </button>
+        </div>
+      </div>
       <div className="admin-table">
-        {events.map((event) => (
+        {filteredEvents.length === 0 ? (
+          <div className="empty-state">
+            <strong>Aucune soiree ne correspond au filtre actuel.</strong>
+            <p>Commencez par creer une nouvelle soiree ou modifiez votre recherche.</p>
+          </div>
+        ) : filteredEvents.map((event) => (
           <div key={event.id} className="admin-row">
             <div>
               <strong>{event.title}</strong>
               <p>{event.location}</p>
+              <small>{event.slug}</small>
             </div>
-            <span>{new Date(event.event_date).toLocaleDateString('fr-BE')}</span>
+            <span>{formatEventDate(event.event_date)}</span>
             <span>{event.is_published ? 'Publié' : 'Brouillon'}</span>
             <div className="admin-row__actions">
+              <Link className="button button--ghost" to={`/soiree/${event.slug}`}>
+                Voir
+              </Link>
               <button className="button button--ghost" type="button" onClick={() => navigate(`/admin/events/${event.id}`)}>
                 Éditer
               </button>
@@ -542,7 +831,21 @@ function AdminEventEditPage({ admin, onAuthenticated }) {
             Ajouter des photos
             <input type="file" accept=".jpg,.jpeg,.png,.webp" multiple onChange={handleUpload} />
           </label>
-        ) : null}
+        ) : <p className="form-hint">Enregistrez d’abord la soiree pour activer l’upload des photos.</p>}
+        <div className="admin-stats admin-stats--compact">
+          <article className="stat-card">
+            <span>Photos</span>
+            <strong>{photos.length}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Publication</span>
+            <strong>{form.is_published ? 'Oui' : 'Non'}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Couverture</span>
+            <strong>{form.cover_photo_id ? 'Definie' : 'A choisir'}</strong>
+          </article>
+        </div>
         {photos.length ? (
           <div className="photo-grid photo-grid--admin">
             {photos.map((photo) => (
@@ -584,26 +887,8 @@ export default function App() {
         <Route path="/archives" element={<ArchivesPage />} />
         <Route path="/archives/:year" element={<YearPage />} />
         <Route path="/soiree/:slug" element={<EventPage />} />
-        <Route
-          path="/a-propos"
-          element={
-            <StaticPage
-              eyebrow="À propos"
-              title="L’univers Sauroraa"
-              text="Une direction artistique nocturne, immersive et pensée pour faire durer l’énergie des soirées au-delà de l’événement."
-            />
-          }
-        />
-        <Route
-          path="/contact"
-          element={
-            <StaticPage
-              eyebrow="Contact"
-              title="Mentions et contact"
-              text="Ajoutez ici les mentions légales, les droits à l’image, la politique de confidentialité et les coordonnées officielles."
-            />
-          }
-        />
+        <Route path="/a-propos" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/admin/login" element={<AdminLoginPage onAuthenticated={setAdmin} />} />
         <Route
           path="/admin"
