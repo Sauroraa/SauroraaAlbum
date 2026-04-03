@@ -542,9 +542,9 @@ function HomePage({ t, language }) {
   })
 
   useEffect(() => {
-    fetchYears().then(setYears)
-    fetchEvents().then((items) => setEvents(items.slice(0, 4)))
-    fetchSiteAnalytics().then(setSiteAnalytics).catch(() => {})
+    fetchYears().then((items) => setYears(Array.isArray(items) ? items : [])).catch(() => setYears([]))
+    fetchEvents().then((items) => setEvents(Array.isArray(items) ? items.slice(0, 4) : [])).catch(() => setEvents([]))
+    fetchSiteAnalytics().then((data) => setSiteAnalytics(data || null)).catch(() => setSiteAnalytics(null))
   }, [])
 
   return (
@@ -682,7 +682,7 @@ function ArchivesPage({ t }) {
   })
 
   useEffect(() => {
-    fetchYears().then(setYears)
+    fetchYears().then((items) => setYears(Array.isArray(items) ? items : [])).catch(() => setYears([]))
   }, [])
 
   return (
@@ -728,7 +728,7 @@ function YearPage({ t, language }) {
   })
 
   useEffect(() => {
-    fetchEventsByYear(year).then(setEvents)
+    fetchEventsByYear(year).then((items) => setEvents(Array.isArray(items) ? items : [])).catch(() => setEvents([]))
   }, [year])
 
   return (
@@ -762,7 +762,7 @@ function EventPage({ t, language }) {
   const activePhotoId = activePhoto === null ? null : event?.photos?.[activePhoto]?.id || null
 
   useEffect(() => {
-    fetchEvent(slug).then(setEvent)
+    fetchEvent(slug).then((item) => setEvent(item || null)).catch(() => setEvent(null))
   }, [slug])
 
   useEffect(() => {

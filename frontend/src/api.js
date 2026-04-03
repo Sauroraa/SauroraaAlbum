@@ -5,29 +5,37 @@ export const api = axios.create({
   withCredentials: true,
 })
 
+function asArray(value) {
+  return Array.isArray(value) ? value : []
+}
+
+function asObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null
+}
+
 export async function fetchYears() {
   const { data } = await api.get('/years')
-  return data.data
+  return asArray(data?.data)
 }
 
 export async function fetchEvents(params = {}) {
   const { data } = await api.get('/events', { params })
-  return data.data
+  return asArray(data?.data)
 }
 
 export async function fetchEventsByYear(year) {
   const { data } = await api.get(`/events/year/${year}`)
-  return data.data
+  return asArray(data?.data)
 }
 
 export async function fetchEvent(slug) {
   const { data } = await api.get(`/events/${slug}`)
-  return data.data
+  return asObject(data?.data)
 }
 
 export async function fetchSiteAnalytics() {
   const { data } = await api.get('/analytics/site')
-  return data.data
+  return asObject(data?.data)
 }
 
 export async function trackVisit(payload) {
@@ -44,12 +52,12 @@ export async function trackPhotoDownload(payload) {
 
 export async function fetchAdminMe() {
   const { data } = await api.get('/admin/me')
-  return data.data
+  return asObject(data?.data)
 }
 
 export async function loginAdmin(payload) {
   const { data } = await api.post('/admin/login', payload)
-  return data.data
+  return asObject(data?.data)
 }
 
 export async function logoutAdmin() {
@@ -58,12 +66,12 @@ export async function logoutAdmin() {
 
 export async function fetchAdminEvents() {
   const { data } = await api.get('/admin/events')
-  return data.data
+  return asArray(data?.data)
 }
 
 export async function fetchAdminAnalytics() {
   const { data } = await api.get('/admin/analytics')
-  return data.data
+  return asObject(data?.data)
 }
 
 export async function saveEvent(payload, id) {
@@ -72,7 +80,7 @@ export async function saveEvent(payload, id) {
     return
   }
   const { data } = await api.post('/admin/events', payload)
-  return data.data
+  return asObject(data?.data)
 }
 
 export async function deleteEvent(id) {
