@@ -276,8 +276,7 @@ class PublicController
         header('Content-Description: File Transfer');
         header('Content-Type: ' . $mime);
         header('Content-Length: ' . (string) filesize($path));
-        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
-        header("Content-Disposition: attachment; filename*=UTF-8''" . rawurlencode($downloadName));
+        header($this->contentDispositionHeader($downloadName));
         header('Cache-Control: private, max-age=0, must-revalidate');
         header('Pragma: public');
 
@@ -289,8 +288,7 @@ class PublicController
     {
         header('Content-Description: File Transfer');
         header('Content-Type: image/png');
-        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
-        header("Content-Disposition: attachment; filename*=UTF-8''" . rawurlencode($downloadName));
+        header($this->contentDispositionHeader($downloadName));
         header('Cache-Control: private, max-age=0, must-revalidate');
         header('Pragma: public');
 
@@ -299,5 +297,16 @@ class PublicController
         imagepng($image, null, 0);
         imagedestroy($image);
         exit;
+    }
+
+    private function contentDispositionHeader(string $downloadName): string
+    {
+        $asciiName = preg_replace('/[^A-Za-z0-9._-]/', '-', $downloadName) ?: 'download.png';
+
+        return sprintf(
+            "Content-Disposition: attachment; filename=\"%s\"; filename*=UTF-8''%s",
+            $asciiName,
+            rawurlencode($downloadName)
+        );
     }
 }
