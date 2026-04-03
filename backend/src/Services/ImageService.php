@@ -42,9 +42,12 @@ class ImageService
 
         $safeName = uniqid('photo_', true);
         $originalExt = self::ALLOWED_MIMES[$mime];
+        $targetFormat = self::outputFormatForMime($mime);
+        $webExt = self::extensionForFormat($targetFormat);
+        $thumbExt = self::extensionForFormat($targetFormat);
         $originalRelative = 'events/' . $year . '/' . $slug . '/original/' . $safeName . '.' . $originalExt;
-        $webRelative = 'events/' . $year . '/' . $slug . '/web/' . $safeName . '.webp';
-        $thumbRelative = 'events/' . $year . '/' . $slug . '/thumb/' . $safeName . '.webp';
+        $webRelative = 'events/' . $year . '/' . $slug . '/web/' . $safeName . '.' . $webExt;
+        $thumbRelative = 'events/' . $year . '/' . $slug . '/thumb/' . $safeName . '.' . $thumbExt;
 
         if (!self::persistUploadedFile($file['tmp_name'], dirname(__DIR__, 2) . '/uploads/' . $originalRelative)) {
             throw new \RuntimeException('Impossible d’enregistrer le fichier uploadé sur le serveur.');
@@ -54,8 +57,8 @@ class ImageService
         $source = self::createImageResource($originalPath, $mime);
 
         if ($source) {
-            self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $webRelative, 1800, 82);
-            self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $thumbRelative, 640, 76);
+            self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $webRelative, 2200, $targetFormat, 92);
+            self::resizeAndWrite($source, dirname(__DIR__, 2) . '/uploads/' . $thumbRelative, 720, $targetFormat, 90);
             imagedestroy($source);
         } else {
             if (!@copy($originalPath, dirname(__DIR__, 2) . '/uploads/' . $webRelative)) {
@@ -86,7 +89,7 @@ class ImageService
         };
     }
 
-    private static function resizeAndWrite(\GdImage $source, string $targetPath, int $maxWidth, int $quality): void
+    private static function resizeAndWrite(\GdImage $source, string $targetPath, int $maxWidth, string $format, int $quality): void
     {
         $width = imagesx($source);
         $height = imagesy($source);
@@ -95,14 +98,56 @@ class ImageService
         $newHeight = (int) round($height * $ratio);
 
         $canvas = imagecreatetruecolor($newWidth, $newHeight);
-        imagealphablending($canvas, true);
-        imagesavealpha($canvas, true);
+
+        if ($format === 'png') {
+            imagealphablending($canvas, false);
+            imagesavealpha($canvas, true);
+            $transparent = imagecolorallocatealpha($canvas, 0, 0, 0, 127);
+            imagefilledrectangle($canvas, 0, 0, $newWidth, $newHeight, $transparent);
+        } else {
+            $background = imagecolorallocate($canvas, 0, 0, 0);
+            imagefilledrectangle($canvas, 0, 0, $newWidth, $newHeight, $background);
+            imagealphablending($canvas, true);
+        }
+
         imagecopyresampled($canvas, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-        if (!imagewebp($canvas, $targetPath, $quality)) {
+
+        $written = match ($format) {
+            'png' => imagepng($canvas, $targetPath, self::pngCompressionLevel($quality)),
+            default => imagejpeg($canvas, $targetPath, max(88, min(100, $quality))),
+        };
+
+        if (!$written) {
             imagedestroy($canvas);
             throw new \RuntimeException('Impossible d’écrire l’image optimisée.');
         }
+
         imagedestroy($canvas);
+    }
+
+    private static function outputFormatForMime(string $mime): string
+    {
+        return match ($mime) {
+            'image/png' => 'png',
+            default => 'jpeg',
+        };
+    }
+
+    private static function extensionForFormat(string $format): string
+    {
+        return $format === 'png' ? 'png' : 'jpg';
+    }
+
+    private static function pngCompressionLevel(int $quality): int
+    {
+        $quality = max(0, min(100, $quality));
+
+        return match (true) {
+            $quality >= 95 => 1,
+            $quality >= 90 => 2,
+            $quality >= 85 => 3,
+            default => 4,
+        };
     }
 
     private static function createImageResource(string $path, string $mime): ?\GdImage

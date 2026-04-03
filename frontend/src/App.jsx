@@ -314,6 +314,24 @@ function Layout({ children, admin, t, language, setLanguage }) {
   )
 }
 
+function getPhotoDownloadName(photo) {
+  if (photo?.filename && /\.[a-z0-9]+$/i.test(photo.filename)) {
+    return photo.filename.replace(/\.webp$/i, '.jpg')
+  }
+
+  const source = photo?.download_url || photo?.url || ''
+
+  try {
+    const pathname = new URL(source, window.location.origin).pathname
+    const base = pathname.split('/').filter(Boolean).pop()
+    if (base && /\.[a-z0-9]+$/i.test(base)) {
+      return decodeURIComponent(base)
+    }
+  } catch {}
+
+  return `${(photo?.alt_text || `sauroraa-photo-${photo?.id || 'image'}`).replace(/\s+/g, '-').toLowerCase()}.jpg`
+}
+
 function SectionIntro({ eyebrow, title, text, action }) {
   return (
     <div className="section-intro">
@@ -457,8 +475,10 @@ function PhotoLightbox({ photos, index, onClose, onMove, onDownload, t }) {
     onDownload?.(photo.id)
 
     const link = document.createElement('a')
-    link.href = photo.url
-    link.download = (photo.alt_text || `sauroraa-photo-${photo.id}`).replace(/\s+/g, '-').toLowerCase()
+    link.href = photo.download_url || photo.url
+    if (!photo.download_url) {
+      link.download = getPhotoDownloadName(photo)
+    }
     document.body.appendChild(link)
     link.click()
     link.remove()

@@ -65,6 +65,7 @@ class AdminPhotoController
                     'is_visible' => true,
                     'position' => $position,
                     'url' => assetUrl('uploads/' . $stored['filepath']),
+                    'download_url' => assetUrl('api/photos/' . $photoId . '/download'),
                     'thumbnail_url' => assetUrl('uploads/' . $stored['thumbnail_path']),
                 ];
             }
@@ -179,9 +180,12 @@ class AdminPhotoController
                     p.is_visible,
                     p.filepath,
                     p.thumbnail_path,
+                    e.year,
+                    e.slug,
                     (SELECT COUNT(*) FROM photo_views pv WHERE pv.photo_id = p.id) AS views_count,
                     (SELECT COUNT(*) FROM photo_downloads pd WHERE pd.photo_id = p.id) AS downloads_count
              FROM photos p
+             INNER JOIN events e ON e.id = p.event_id
              WHERE p.event_id = :event_id
              ORDER BY p.position ASC, p.id ASC'
         );
@@ -199,6 +203,7 @@ class AdminPhotoController
                     'position' => (int) $photo['position'],
                     'is_visible' => (bool) $photo['is_visible'],
                     'url' => assetUrl('uploads/' . $photo['filepath']),
+                    'download_url' => assetUrl('api/photos/' . $photo['id'] . '/download'),
                     'thumbnail_url' => assetUrl('uploads/' . $photo['thumbnail_path']),
                     'views_count' => (int) ($photo['views_count'] ?? 0),
                     'downloads_count' => (int) ($photo['downloads_count'] ?? 0),

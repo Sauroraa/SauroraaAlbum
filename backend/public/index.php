@@ -72,6 +72,10 @@ if (preg_match('#^/api/events/([a-z0-9-]+)$#', $uri, $matches) && $method === 'G
     $public->eventBySlug($matches[1]);
 }
 
+if (preg_match('#^/api/photos/(\d+)/download$#', $uri, $matches) && $method === 'GET') {
+    $public->downloadPhoto((int) $matches[1]);
+}
+
 if ($uri === '/api/analytics/site' && $method === 'GET') {
     $analytics->publicSummary();
 }
