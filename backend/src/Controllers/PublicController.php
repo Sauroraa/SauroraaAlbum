@@ -42,19 +42,19 @@ class PublicController
 
         $mime = $this->detectMime($path);
 
-        if ($mime === 'image/png') {
-            $downloadName = $this->downloadNameForPath($photo['filename']);
-            $this->streamBinaryDownload($path, $downloadName, 'image/png');
+        if ($mime === 'image/png' || $mime === 'image/jpeg') {
+            $downloadName = $this->downloadNameForPath($photo['filename'], $mime);
+            $this->streamBinaryDownload($path, $downloadName, $mime);
         }
 
         $source = $this->createImageResource($path, $mime);
         if (!$source) {
-            http_response_code(422);
-            exit('Conversion PNG impossible.');
+            $downloadName = $this->downloadNameForPath($photo['filename'], 'image/jpeg');
+            $this->streamBinaryDownload($path, $downloadName, $mime);
         }
 
-        $downloadName = $this->downloadNameForPath($photo['filename']);
-        $this->streamPngDownload($source, $downloadName);
+        $downloadName = $this->downloadNameForPath($photo['filename'], 'image/jpeg');
+        $this->streamJpegDownload($source, $downloadName, 100);
     }
 
     public function years(): void
@@ -256,12 +256,15 @@ class PublicController
         };
     }
 
-    private function downloadNameForPath(string $preferredName): string
+    private function downloadNameForPath(string $preferredName, string $mime): string
     {
         $baseName = pathinfo($preferredName, PATHINFO_FILENAME);
         $baseName = $this->sanitizeDownloadName($baseName ?: 'sauroraa-photo');
 
-        return $baseName . '.png';
+        return $baseName . match ($mime) {
+            'image/png' => '.png',
+            default => '.jpg',
+        };
     }
 
     private function sanitizeDownloadName(string $value): string
@@ -284,24 +287,23 @@ class PublicController
         exit;
     }
 
-    private function streamPngDownload(\GdImage $image, string $downloadName): never
+    private function streamJpegDownload(\GdImage $image, string $downloadName, int $quality): never
     {
         header('Content-Description: File Transfer');
-        header('Content-Type: image/png');
+        header('Content-Type: image/jpeg');
         header($this->contentDispositionHeader($downloadName));
         header('Cache-Control: private, max-age=0, must-revalidate');
         header('Pragma: public');
 
-        imagealphablending($image, false);
-        imagesavealpha($image, true);
-        imagepng($image, null, 0);
+        imageinterlace($image, false);
+        imagejpeg($image, null, max(95, min(100, $quality)));
         imagedestroy($image);
         exit;
     }
 
     private function contentDispositionHeader(string $downloadName): string
     {
-        $asciiName = preg_replace('/[^A-Za-z0-9._-]/', '-', $downloadName) ?: 'download.png';
+        $asciiName = preg_replace('/[^A-Za-z0-9._-]/', '-', $downloadName) ?: 'download.jpg';
 
         return sprintf(
             "Content-Disposition: attachment; filename=\"%s\"; filename*=UTF-8''%s",
